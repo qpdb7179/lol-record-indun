@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project overview
 
-**lol-recored-indun** — 리그 오브 레전드 사설방(내전) 5v5 전적 기록 사이트. 공식 전적 검색 사이트는 사설방(커스텀) 게임 기록을 보여주지 않기 때문에, 지인들끼리 하는 내전 이력을 수동으로 남기고 통계를 보기 위해 만듦.
+**lol-record-indun** — 리그 오브 레전드 사설방(내전) 5v5 전적 기록 사이트. 공식 전적 검색 사이트는 사설방(커스텀) 게임 기록을 보여주지 않기 때문에, 지인들끼리 하는 내전 이력을 수동으로 남기고 통계를 보기 위해 만듦.
 
 과거(2026-08 이전) 같은 계정으로 한 번 만들었던 프로젝트였으나 호스팅 서버가 삭제되며 소스도 함께 유실됨(대화 로그로도 복구 불가 확인). 이번엔 그 실수를 되풀이하지 않기 위해 ① GitHub(private repo)에 소스를 남기고 ② 배포를 이 서버(indun.cloud EC2)의 k3s+ArgoCD GitOps 파이프라인에 태워서, 서버가 통째로 사라져도 새 서버에서 k3s 설치 + ArgoCD sync 몇 번으로 복구 가능하게 함.
 
@@ -27,7 +27,7 @@ npm start
 ## Architecture
 
 - `server.js` — Express 앱 엔트리포인트. `public/` 정적 서빙, `/api/champions`(Data Dragon 프록시), `/api/players`, `/api/series`, `/api/stats` 라우트 마운트.
-- `db.js` — SQLite 연결 및 스키마(`players`, `series`, `series_rosters`, `sets`, `set_participants`, `set_bans`). `DB_PATH` 환경변수로 파일 위치 지정(기본 `./data/lol-recored-indun.db`), 없는 디렉토리는 자동 생성.
+- `db.js` — SQLite 연결 및 스키마(`players`, `series`, `series_rosters`, `sets`, `set_participants`, `set_bans`). `DB_PATH` 환경변수로 파일 위치 지정(기본 `./data/lol-record-indun.db`), 없는 디렉토리는 자동 생성.
 - `lib/riot.js` — Riot 공식 API 클라이언트. Account-v1(`asia` 라우팅)으로 riotId→PUUID, Summoner-v4/League-v4/Champion-Mastery-v4(`kr` 라우팅)로 티어·숙련도 상위 3개 조회. `RIOT_API_KEY` 환경변수 필요(없으면 참가자 등록/새로고침 API가 에러 반환).
 - `lib/dataDragon.js` — Riot Data Dragon(`ddragon.leagueoflegends.com`)에서 최신 패치의 챔피언 목록(한글명+이미지 URL)을 가져와 6시간 캐싱. API 키 불필요.
 - `lib/fearless.js` — `getUsedChampionIds(seriesId, beforeSetNumber)`: 같은 시리즈의 이전 세트들에서 밴/픽으로 쓰인 챔피언 id 집합을 반환. 피어리스 드래프트(이번 시즌 LCK 방식 — 한 시리즈 내에서 이미 쓴 챔피언은 이후 세트에서 밴/픽 불가) 검증에 사용.
@@ -45,15 +45,16 @@ npm start
 ## 배포 환경 (코드만 봐서는 알 수 없는 실제 운영 정보)
 
 - **서버**: 이 저장소는 indun.cloud와 같은 AWS EC2(Amazon Linux 2023)에서 개발됨. 실제 운영은 이 서버의 **k3s 클러스터**(별도 인프라 랩 프로젝트로 구축) 위에서 돎 — 기존 indun처럼 systemd가 아님.
-- **컨테이너**: `Dockerfile`(node:18-alpine, better-sqlite3 소스 빌드를 위해 python3/make/g++ 설치). 이미지는 **GitHub Actions**(`.github/workflows/build.yml`)가 main 브랜치 push마다 빌드해서 `ghcr.io/qpdb7179/lol-recored-indun`(`:latest`, `:<sha>`)로 푸시. 이 서버엔 docker가 없어서(containerd만 있음) 로컬 빌드 대신 이 방식을 씀.
-- **k8s 매니페스트**: 앱 코드는 이 repo, k8s 리소스(Deployment/Service/PVC/ArgoCD Application)는 별도 GitOps repo `k3s-lab`(`/root/k3s-lab`, `github.com/qpdb7179/k3s-lab`)의 `manifests/lol-recored-indun/`에 있음. ArgoCD가 그 repo를 보고 자동 동기화.
-- **네트워크**: k3s의 Traefik/ServiceLB는 기존 nginx(indun.cloud가 80/443 사용 중)와 충돌 방지를 위해 비활성화된 상태 → 이 앱은 **NodePort 30081**로 노출, nginx(`/etc/nginx/conf.d/indun.conf`)가 `lol-recored-indun.indun.cloud` → `127.0.0.1:30081`로 리버스 프록시.
+- **컨테이너**: `Dockerfile`(node:18-alpine, better-sqlite3 소스 빌드를 위해 python3/make/g++ 설치). 이미지는 **GitHub Actions**(`.github/workflows/build.yml`)가 main 브랜치 push마다 빌드해서 `ghcr.io/qpdb7179/lol-record-indun`(`:latest`, `:<sha>`)로 푸시. 이 서버엔 docker가 없어서(containerd만 있음) 로컬 빌드 대신 이 방식을 씀.
+- **k8s 매니페스트**: 앱 코드는 이 repo, k8s 리소스(Deployment/Service/PVC/ArgoCD Application)는 별도 GitOps repo `k3s-lab`(`/root/k3s-lab`, `github.com/qpdb7179/k3s-lab`)의 `manifests/lol-record-indun/`에 있음. ArgoCD가 그 repo를 보고 자동 동기화.
+- **네트워크**: k3s의 Traefik/ServiceLB는 기존 nginx(indun.cloud가 80/443 사용 중)와 충돌 방지를 위해 비활성화된 상태 → 이 앱은 **NodePort 30081**로 노출, nginx(`/etc/nginx/conf.d/indun.conf`)가 `lol-record-indun.indun.cloud` → `127.0.0.1:30081`로 리버스 프록시.
 - **DB 영속화**: SQLite 파일은 k3s PVC(local-path-provisioner, 이 노드에 로컬 저장)에 저장. 단일 노드 클러스터라 파드가 재시작돼도 유지되지만, EC2 인스턴스 자체가 삭제되면 함께 사라짐(별도 백업 없음 — 향후 개선 여지로 남겨둠).
 - **Riot API 키**: `RIOT_API_KEY`는 git에 커밋하지 않고 k8s Secret으로 관리(서버에서 `kubectl create secret` 직접 실행). 초기엔 Personal(개발자) 키로 시작(24시간 만료, 수동 갱신 필요) — Production Key는 신청 후 승인되면 같은 방식으로 Secret 값만 교체.
-- **DNS**: 이 서버엔 AWS 자격증명이 없어 Claude가 Route53 레코드를 직접 못 만듦 — `lol-recored-indun.indun.cloud` A레코드는 사용자가 직접 추가해야 함.
+- **DNS**: 이 서버엔 AWS 자격증명이 없어 Claude가 Route53 레코드를 직접 못 만듦 — `lol-record-indun.indun.cloud` A레코드는 사용자가 직접 추가해야 함.
 
 ## 진행 상황 로그 (Status Log)
 
 새 세션에서 작업을 이어받을 때는 이 섹션을 먼저 확인할 것.
 
 - **2026-08-20**: 프로젝트 최초 생성. 참가자 관리/전적 기록(피어리스 드래프트+Bo3·Bo5+진영 스왑)/통계 3탭 전체 스캐폴딩 완료. 로컬에서 API 동작 검증 예정, 아직 배포 파이프라인(Docker/CI/k8s/nginx) 연결 전.
+- **2026-08-20**: 프로젝트명을 `lol-recored-indun`(오타) → `lol-record-indun`으로 리네임. GitHub repo 이름 변경(`gh repo rename`, 자동 리다이렉트됨), 로컬 디렉토리 `/opt/lol-record-indun`으로 이동, 코드 내 모든 참조(package.json, DB_PATH 기본값, 로그 메시지, Dockerfile 이미지 태그) 일괄 치환. GHCR 이미지 이름도 `ghcr.io/qpdb7179/lol-record-indun`으로 바뀌므로 기존 `lol-recored-indun` 패키지는 더 이상 쓰지 않음(정리 필요시 GitHub 패키지 설정에서 수동 삭제).

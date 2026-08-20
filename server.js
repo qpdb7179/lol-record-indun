@@ -25,5 +25,5 @@ app.use('/api/series', seriesRouter);
 app.use('/api/stats', statsRouter);
 
 app.listen(PORT, () => {
-  console.log(`lol-recored-indun listening on :${PORT}`);
+  console.log(`lol-record-indun listening on :${PORT}`);
 });
