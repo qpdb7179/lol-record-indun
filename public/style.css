@@ -109,7 +109,7 @@ select option { background: var(--input-bg); color: var(--text); }
 
 .winner-pick { display: flex; gap: 16px; margin: 12px 0; }
 .edit-actions { display: flex; gap: 8px; }
-#cancelEditBtn { color: var(--muted); }
+.cancel-edit-btn { color: var(--muted); }
 
 #seriesList { list-style: none; padding: 0; }
 #seriesList li { margin-bottom: 4px; }

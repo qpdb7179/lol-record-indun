@@ -440,44 +440,12 @@ function laneMapFromLastSet(lastSet, roster) {
   return new Map(arr.map((p) => [p.lane, p]));
 }
 
+// 상단(#activeSeries)은 오직 "최초 입력"(아직 기록 안 된 다음 세트) 전용 — 이미 기록된 세트 수정은
+// 전부 시리즈 목록(#seriesList) 쪽에서 그 시리즈가 펼쳐진 자리에 인라인으로 렌더됨(startEditingSet 참고).
 async function renderActiveSeries() {
   const s = state.activeSeries;
   const el = document.getElementById('activeSeries');
   if (!s) { el.innerHTML = ''; return; }
-
-  const editingSet = state.editingSetId ? s.sets.find((set) => set.id === state.editingSetId) : null;
-  if (state.editingSetId && !editingSet) state.editingSetId = null;
-
-  if (editingSet) {
-    state.usedFromPreviousSets = new Set(await api(`/api/series/${s.id}/used-champions?excludeSet=${editingSet.id}`));
-    el.innerHTML = `
-      ${renderSeriesCard(s)}
-      <form id="setForm">
-        <h4 class="set-form-title">Game ${editingSet.setNumber} 수정</h4>
-        <div class="team-columns">
-          ${renderTeamInputs('blue', editingSet.blueTeam, laneMapFromParticipants(editingSet.blueTeam), { includeChampionDefaults: true, banDefaults: editingSet.bans.blue, lockedLabel: '(선수 구성 고정)' })}
-          ${renderTeamInputs('red', editingSet.redTeam, laneMapFromParticipants(editingSet.redTeam), { includeChampionDefaults: true, banDefaults: editingSet.bans.red, lockedLabel: '(선수 구성 고정)' })}
-        </div>
-        <div class="winner-pick">
-          <label><input type="radio" name="winner" value="blue" ${editingSet.winnerRoster === editingSet.blueRoster ? 'checked' : ''}> 블루 승리</label>
-          <label><input type="radio" name="winner" value="red" ${editingSet.winnerRoster === editingSet.redRoster ? 'checked' : ''}> 레드 승리</label>
-        </div>
-        <p class="error" id="setFormError"></p>
-        <div class="edit-actions">
-          <button type="submit">수정 저장</button>
-          <button type="button" id="cancelEditBtn">취소</button>
-        </div>
-      </form>
-    `;
-    document.getElementById('setForm').addEventListener('submit', (e) => submitSet(e, editingSet.id));
-    document.getElementById('cancelEditBtn').addEventListener('click', async () => {
-      state.editingSetId = null;
-      await renderActiveSeries();
-    });
-    attachDragHandlers(el);
-    updatePlayerSelectOptions();
-    return;
-  }
 
   if (s.status === 'completed') {
     el.innerHTML = renderSeriesCard(s);
@@ -520,12 +488,12 @@ async function renderActiveSeries() {
       <button type="submit">세트 기록 저장</button>
     </form>
   `;
-  document.getElementById('setForm').addEventListener('submit', submitSet);
+  document.getElementById('setForm').addEventListener('submit', (e) => submitSet(e, s.id, null));
   if (nextSetNumber === 1) {
     document.getElementById('loadLastRosterBtn').addEventListener('click', () => loadLastRoster(s.id));
   }
   attachDragHandlers(el);
-  updatePlayerSelectOptions();
+  updatePlayerSelectOptions(el);
 }
 
 // 매번 10명을 처음부터 고르지 않아도 되게, 가장 최근에 실제로 세트가 기록된(=로스터가 확정된)
@@ -646,9 +614,12 @@ function swapRowContents(rowA, rowB) {
 // ---- 챔피언 이미지 피커 ----
 let pickerTargetBtn = null;
 
+// 상단 새 세트 입력 폼과 목록 안의 수정 폼이 동시에 열려있을 수 있어서(각자 다른 시리즈일 수 있음),
+// 문서 전체가 아니라 클릭된 슬롯이 속한 <form> 안에서만 중복 픽/밴을 검사해야 서로 안 섞임.
 function computeDisabledChampionIds(excludeButton) {
   const used = new Set(state.usedFromPreviousSets);
-  document.querySelectorAll('#activeSeries .champion-slot[data-champion-id]').forEach((btn) => {
+  const scope = excludeButton.closest('form') || document;
+  scope.querySelectorAll('.champion-slot[data-champion-id]').forEach((btn) => {
     if (btn === excludeButton) return;
     const id = Number(btn.dataset.championId);
     if (id) used.add(id);
@@ -727,8 +698,8 @@ document.getElementById('activeSeries').addEventListener('click', async (e) => {
   }
   const editBtn = e.target.closest('.edit-game-btn');
   if (editBtn) {
-    state.editingSetId = Number(editBtn.dataset.setId);
-    await renderActiveSeries();
+    // 상단은 최초 입력 전용이라, 이미 기록된 세트 수정은 시리즈 목록 쪽으로 내려서 그 자리에서 함.
+    await startEditingSet(Number(editBtn.dataset.seriesId), Number(editBtn.dataset.setId));
     return;
   }
   const deleteGameBtn = e.target.closest('.delete-game-btn');
@@ -741,12 +712,26 @@ document.getElementById('activeSeries').addEventListener('click', async (e) => {
   }
 });
 
+// 이미 기록된 세트 수정은 어디서 클릭했든(상단 또는 목록) 항상 시리즈 목록(#seriesList)의 그 시리즈가
+// 펼쳐진 자리에서 진행 — 상단은 "최초 입력" 전용으로 남겨두기 위함.
+async function startEditingSet(seriesId, setId) {
+  state.expandedSeriesData = await api(`/api/series/${seriesId}`);
+  state.expandedSeriesId = seriesId;
+  state.editingSetId = setId;
+  state.usedFromPreviousSets = new Set(await api(`/api/series/${seriesId}/used-champions?excludeSet=${setId}`));
+  renderSeriesList();
+  document.getElementById('seriesList').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
 document.getElementById('activeSeries').addEventListener('change', (e) => {
-  if (e.target.classList.contains('player-select')) updatePlayerSelectOptions();
+  if (e.target.classList.contains('player-select')) updatePlayerSelectOptions(document.getElementById('activeSeries'));
 });
 
-function updatePlayerSelectOptions() {
-  const selects = [...document.querySelectorAll('#activeSeries .player-select')];
+// 상단(새 세트 입력)과 목록(기존 세트 수정) 폼이 동시에 열려있을 수 있어서 scope를 명시적으로 받음 —
+// 안 주면 문서 전체를 봐서 서로 다른 폼끼리 "이미 선택된 선수"가 잘못 간섭할 수 있음.
+function updatePlayerSelectOptions(scope) {
+  const root = scope || document;
+  const selects = [...root.querySelectorAll('.player-select')];
   const chosen = new Set(selects.map((s) => s.value).filter(Boolean));
   selects.forEach((select) => {
     [...select.options].forEach((opt) => {
@@ -756,46 +741,55 @@ function updatePlayerSelectOptions() {
   });
 }
 
-function collectTeam(side) {
-  const block = document.querySelector(`.team-block.${side}`);
+function collectTeam(form, side) {
+  const block = form.querySelector(`.team-block.${side}`);
   return [...block.querySelectorAll('.lane-row')].map((row) => ({
     playerId: Number(row.querySelector('.player-select').value),
     lane: row.dataset.lane,
     championId: Number(row.querySelector('.champion-slot').dataset.championId) || null,
   }));
 }
-function collectBans(side) {
-  const block = document.querySelector(`.team-block.${side}`);
+function collectBans(form, side) {
+  const block = form.querySelector(`.team-block.${side}`);
   return [...block.querySelectorAll('.ban-slot')].map((el) => Number(el.dataset.championId)).filter(Boolean);
 }
 
-async function submitSet(e, editingSetId) {
+// seriesId/editingSetId를 state가 아니라 인자로 명시적으로 받음 — 상단 새 세트 입력과 목록 안 세트
+// 수정이 서로 다른 시리즈를 대상으로 동시에 열려있을 수 있어서, 폼 자신(e.target)이 어떤 시리즈/세트를
+// 대상으로 하는지 스스로 알고 있어야 함(state.activeSeries에만 의존하면 둘이 섞일 수 있었음).
+async function submitSet(e, seriesId, editingSetId) {
   e.preventDefault();
-  const errEl = document.getElementById('setFormError');
+  const form = e.target;
+  const errEl = form.querySelector('.error');
   errEl.textContent = '';
 
-  const undecidedBans = document.querySelectorAll('#activeSeries .ban-slot[data-champion-id=""]').length;
+  const undecidedBans = form.querySelectorAll('.ban-slot[data-champion-id=""]').length;
   if (undecidedBans > 0) {
     errEl.textContent = '아직 정하지 않은 밴 슬롯이 있습니다. 챔피언을 고르거나 "밴 없음으로 표시"를 눌러 5개를 모두 정해주세요.';
     return;
   }
 
-  const winner = document.querySelector('input[name="winner"]:checked')?.value;
+  const winner = form.querySelector('input[name="winner"]:checked')?.value;
   const payload = {
-    blueTeam: collectTeam('blue'),
-    redTeam: collectTeam('red'),
-    bans: { blue: collectBans('blue'), red: collectBans('red') },
+    blueTeam: collectTeam(form, 'blue'),
+    redTeam: collectTeam(form, 'red'),
+    bans: { blue: collectBans(form, 'blue'), red: collectBans(form, 'red') },
     winner,
   };
-  const url = editingSetId
-    ? `/api/series/${state.activeSeries.id}/sets/${editingSetId}`
-    : `/api/series/${state.activeSeries.id}/sets`;
+  const url = editingSetId ? `/api/series/${seriesId}/sets/${editingSetId}` : `/api/series/${seriesId}/sets`;
   const method = editingSetId ? 'PUT' : 'POST';
   try {
-    state.activeSeries = await api(url, { method, body: JSON.stringify(payload) });
-    state.editingSetId = null;
-    await renderActiveSeries();
-    await loadSeriesList();
+    const updated = await api(url, { method, body: JSON.stringify(payload) });
+    if (editingSetId) {
+      // 수정은 항상 목록(#seriesList) 쪽 아코디언에 반영 — 상단은 건드리지 않음(최초 입력 전용).
+      state.expandedSeriesData = updated;
+      state.editingSetId = null;
+      await loadSeriesList();
+    } else {
+      state.activeSeries = updated;
+      await renderActiveSeries();
+      await loadSeriesList();
+    }
   } catch (err) {
     errEl.textContent = err.message;
   }
@@ -832,7 +826,7 @@ function renderGameCard(set, seriesId, isLast) {
       <div class="game-card-header">
         <span>Game ${set.setNumber}</span>
         <div class="game-card-actions">
-          <button type="button" class="edit-game-btn" data-set-id="${set.id}">수정</button>
+          <button type="button" class="edit-game-btn" data-set-id="${set.id}" data-series-id="${seriesId}">수정</button>
           ${isLast ? `<button type="button" class="delete-game-btn" data-set-id="${set.id}" data-series-id="${seriesId}">삭제</button>` : ''}
         </div>
       </div>
@@ -893,31 +887,74 @@ function renderSeriesList() {
       ? `<li class="series-date-heading">${s.matchDate}</li>`
       : '';
     lastDate = s.matchDate;
+    const isExpanded = state.expandedSeriesId === s.id && state.expandedSeriesData;
+    const editingSet = isExpanded && state.editingSetId
+      ? state.expandedSeriesData.sets.find((set) => set.id === state.editingSetId)
+      : null;
     return `${dateHeading}
     <li class="series-list-item">
       <button class="series-link" data-id="${s.id}" data-status="${s.status}">
         <span>${s.format.toUpperCase()} · ${s.status === 'completed' ? `종료(로스터 ${s.winnerRoster} 승)` : '진행중'}</span>
         <span class="series-link-chevron">${state.expandedSeriesId === s.id ? '▲' : '▼'}</span>
       </button>
-      <div class="series-expand">${state.expandedSeriesId === s.id && state.expandedSeriesData ? renderSeriesCard(state.expandedSeriesData) : ''}</div>
+      <div class="series-expand">
+        ${isExpanded ? renderSeriesCard(state.expandedSeriesData) : ''}
+        ${editingSet ? renderSetEditForm(state.expandedSeriesData.id, editingSet) : ''}
+      </div>
     </li>`;
   });
   el.innerHTML = rows.join('');
+  attachDragHandlers(el);
+  updatePlayerSelectOptions(el);
+}
+
+// 이미 기록된 세트 수정 폼 — 예전엔 상단에서만 렌더했는데, 이제 시리즈 목록이 펼쳐진 자리에 인라인으로 붙음.
+function renderSetEditForm(seriesId, editingSet) {
+  return `
+    <form class="set-edit-form" data-series-id="${seriesId}" data-set-id="${editingSet.id}">
+      <h4 class="set-form-title">Game ${editingSet.setNumber} 수정</h4>
+      <div class="team-columns">
+        ${renderTeamInputs('blue', editingSet.blueTeam, laneMapFromParticipants(editingSet.blueTeam), { includeChampionDefaults: true, banDefaults: editingSet.bans.blue, lockedLabel: '(선수 구성 고정)' })}
+        ${renderTeamInputs('red', editingSet.redTeam, laneMapFromParticipants(editingSet.redTeam), { includeChampionDefaults: true, banDefaults: editingSet.bans.red, lockedLabel: '(선수 구성 고정)' })}
+      </div>
+      <div class="winner-pick">
+        <label><input type="radio" name="winner" value="blue" ${editingSet.winnerRoster === editingSet.blueRoster ? 'checked' : ''}> 블루 승리</label>
+        <label><input type="radio" name="winner" value="red" ${editingSet.winnerRoster === editingSet.redRoster ? 'checked' : ''}> 레드 승리</label>
+      </div>
+      <p class="error"></p>
+      <div class="edit-actions">
+        <button type="submit">수정 저장</button>
+        <button type="button" class="cancel-edit-btn">취소</button>
+      </div>
+    </form>`;
 }
 
 document.getElementById('seriesList').addEventListener('click', async (e) => {
+  const champBtn = e.target.closest('.champion-slot');
+  if (champBtn) {
+    openChampionPicker(champBtn);
+    return;
+  }
+
+  const cancelBtn = e.target.closest('.cancel-edit-btn');
+  if (cancelBtn) {
+    state.editingSetId = null;
+    renderSeriesList();
+    return;
+  }
+
   const linkBtn = e.target.closest('.series-link');
   if (linkBtn) {
     const id = Number(linkBtn.dataset.id);
     if (linkBtn.dataset.status === 'in_progress') {
       // 진행중인 시리즈는 계속 입력해야 하니 상단 입력 영역으로
       state.activeSeries = await api(`/api/series/${id}`);
-      state.editingSetId = null;
       await renderActiveSeries();
       document.getElementById('activeSeries').scrollIntoView({ behavior: 'smooth', block: 'start' });
       return;
     }
     // 완료된 시리즈는 스크롤 이동 없이 목록 안에서 그 자리에 펼침(아코디언)
+    state.editingSetId = null; // 다른 시리즈로 전환하거나 접을 때 남아있던 수정 상태는 정리
     if (state.expandedSeriesId === id) {
       state.expandedSeriesId = null;
       state.expandedSeriesData = null;
@@ -935,17 +972,14 @@ document.getElementById('seriesList').addEventListener('click', async (e) => {
     await api(`/api/series/${delBtn.dataset.id}`, { method: 'DELETE' });
     state.expandedSeriesId = null;
     state.expandedSeriesData = null;
+    state.editingSetId = null;
     await loadSeriesList();
     return;
   }
 
   const editBtn = e.target.closest('.edit-game-btn');
   if (editBtn) {
-    // 목록 안에서 펼쳐진 걸 수정하려면 상단 입력 영역으로 끌어올림(편집 폼은 거기서만 렌더)
-    state.activeSeries = state.expandedSeriesData;
-    state.editingSetId = Number(editBtn.dataset.setId);
-    await renderActiveSeries();
-    document.getElementById('activeSeries').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    await startEditingSet(Number(editBtn.dataset.seriesId), Number(editBtn.dataset.setId));
     return;
   }
 
@@ -953,8 +987,18 @@ document.getElementById('seriesList').addEventListener('click', async (e) => {
   if (deleteGameBtn) {
     if (!confirm(`Game ${deleteGameBtn.closest('.game-card').querySelector('.game-card-header span').textContent.replace('Game ', '')}을(를) 삭제할까요?`)) return;
     state.expandedSeriesData = await api(`/api/series/${deleteGameBtn.dataset.seriesId}/sets/${deleteGameBtn.dataset.setId}`, { method: 'DELETE' });
+    state.editingSetId = null;
     await loadSeriesList();
   }
+});
+
+document.getElementById('seriesList').addEventListener('change', (e) => {
+  if (e.target.classList.contains('player-select')) updatePlayerSelectOptions(document.getElementById('seriesList'));
+});
+
+document.getElementById('seriesList').addEventListener('submit', (e) => {
+  if (!e.target.classList.contains('set-edit-form')) return;
+  submitSet(e, Number(e.target.dataset.seriesId), Number(e.target.dataset.setId));
 });
 
 // ---- 통계 ----
