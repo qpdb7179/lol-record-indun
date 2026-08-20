@@ -115,7 +115,7 @@ tbody tr:hover { background: var(--input-bg); }
 .champion-grid-item:disabled { opacity: 0.25; cursor: not-allowed; }
 
 /* ---- 참가자 상세 모달 ---- */
-.modal.player-detail-modal { background: var(--card-bg); border: 1px solid var(--border-strong); border-radius: 10px; width: min(420px, 92vw); max-height: 85vh; display: flex; flex-direction: column; overflow: hidden; }
+.modal.player-detail-modal { background: var(--card-bg); border: 1px solid var(--border-strong); border-radius: 10px; width: min(480px, 92vw); max-height: 85vh; display: flex; flex-direction: column; overflow: hidden; }
 .modal.player-detail-modal .modal-header { justify-content: space-between; }
 #closePlayerDetail { border: none; background: none; color: var(--text); font-size: 18px; padding: 0 6px; }
 .player-detail-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 12px; }
@@ -147,6 +147,30 @@ tbody tr:hover { background: var(--input-bg); }
 .recent-stats-table { width: 100%; border-collapse: collapse; background: none; }
 .recent-stats-table th, .recent-stats-table td { border-bottom: 1px solid var(--border); padding: 6px 4px; font-size: 12px; text-align: left; }
 .recent-champ-icon { width: 22px; height: 22px; border-radius: 50%; object-fit: cover; vertical-align: middle; margin-right: 6px; }
+
+.recent-stats-aggregate { margin-top: 10px; font-size: 12px; }
+.recent-stats-aggregate summary { cursor: pointer; color: var(--muted); padding: 4px 0; }
+.recent-stats-aggregate summary:hover { color: var(--text); }
+
+.match-list { display: flex; flex-direction: column; gap: 6px; }
+.match-row { display: flex; gap: 10px; padding: 8px 10px; border-radius: 6px; border-left: 3px solid transparent; background: var(--input-bg); }
+.match-row.match-win { border-left-color: var(--color-blue); }
+.match-row.match-loss { border-left-color: var(--color-red); }
+.match-champ-icon { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
+.match-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.match-line1 { display: flex; align-items: center; gap: 6px; font-size: 12px; flex-wrap: wrap; }
+.match-result { font-weight: 700; }
+.match-row.match-win .match-result { color: var(--color-blue-text); }
+.match-row.match-loss .match-result { color: var(--color-red-text); }
+.match-champ-name { font-weight: 600; }
+.match-queue, .match-time { color: var(--muted); font-size: 11px; }
+.match-time { margin-left: auto; }
+.match-line2 { display: flex; gap: 10px; font-size: 11px; color: var(--muted); }
+.match-line2 b { color: var(--text); }
+.match-teams { display: flex; align-items: center; gap: 6px; margin-top: 2px; }
+.match-team-icons { display: flex; gap: 2px; }
+.match-team-icons img { width: 16px; height: 16px; border-radius: 50%; object-fit: cover; }
+.match-team-sep { font-size: 10px; color: var(--muted); }
 
 /* ---- 시리즈/게임 카드 ---- */
 .series-card { background: var(--card-bg); color: var(--text); border: 1px solid var(--accent-gold); border-radius: 10px; padding: 16px; margin: 16px 0; }

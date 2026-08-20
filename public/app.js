@@ -132,14 +132,12 @@ function formatRelativeTime(iso) {
   return `${Math.round(diffHour / 24)}일 전`;
 }
 
-function renderRecentStatsTable(stats, fetchedAt) {
-  if (!stats) return '<p class="muted">아직 불러오지 않았습니다. API 호출량이 있어서 버튼을 눌러야 조회됩니다.</p>';
+function renderChampionAggregateTable(perChampion) {
   return `
-    <p class="recent-stats-summary">${stats.totalGames}전 ${stats.totalWins}승 ${stats.totalLosses}패 · ${formatRelativeTime(fetchedAt)} 기준</p>
     <table class="recent-stats-table">
       <thead><tr><th>챔피언</th><th>전적</th><th>승률</th><th>KDA</th></tr></thead>
       <tbody>
-        ${stats.perChampion.map((c) => `
+        ${perChampion.map((c) => `
           <tr>
             <td><img class="recent-champ-icon" src="${championImg(c.championId)}" alt="${championLabel(c.championId)}">${championLabel(c.championId)}</td>
             <td>${c.games}전 ${c.wins}승 ${c.losses}패</td>
@@ -148,6 +146,46 @@ function renderRecentStatsTable(stats, fetchedAt) {
           </tr>`).join('')}
       </tbody>
     </table>`;
+}
+
+function renderRecentMatchList(perGame) {
+  if (!perGame || !perGame.length) return '<p class="muted">최근 경기가 없습니다.</p>';
+  return `
+    <div class="match-list">
+      ${perGame.map((g) => `
+        <div class="match-row ${g.win ? 'match-win' : 'match-loss'}">
+          <img class="match-champ-icon" src="${championImg(g.championId)}" alt="${championLabel(g.championId)}">
+          <div class="match-main">
+            <div class="match-line1">
+              <span class="match-result">${g.win ? '승리' : '패배'}</span>
+              <span class="match-champ-name">${championLabel(g.championId)}</span>
+              <span class="match-queue">${g.queueLabel}</span>
+              <span class="match-time">${formatRelativeTime(g.gameEndTimestamp)}</span>
+            </div>
+            <div class="match-line2">
+              <span class="match-kda">${g.kills}/${g.deaths}/${g.assists} <b>${g.kda === null ? 'Perfect' : `${g.kda}:1`}</b></span>
+              <span class="match-cs">CS ${g.cs}</span>
+              <span class="match-duration">${Math.round(g.gameDurationSec / 60)}분</span>
+            </div>
+            <div class="match-teams">
+              <span class="match-team-icons">${g.myTeam.map((cid) => `<img src="${championImg(cid)}" alt="${championLabel(cid)}" title="${championLabel(cid)}">`).join('')}</span>
+              <span class="match-team-sep">vs</span>
+              <span class="match-team-icons">${g.enemyTeam.map((cid) => `<img src="${championImg(cid)}" alt="${championLabel(cid)}" title="${championLabel(cid)}">`).join('')}</span>
+            </div>
+          </div>
+        </div>`).join('')}
+    </div>`;
+}
+
+function renderRecentStatsBody(stats, fetchedAt) {
+  if (!stats) return '<p class="muted">아직 불러오지 않았습니다. API 호출량이 있어서 버튼을 눌러야 조회됩니다.</p>';
+  return `
+    <p class="recent-stats-summary">${stats.totalGames}전 ${stats.totalWins}승 ${stats.totalLosses}패 · ${formatRelativeTime(fetchedAt)} 기준</p>
+    ${renderRecentMatchList(stats.perGame)}
+    <details class="recent-stats-aggregate">
+      <summary>챔피언별 요약</summary>
+      ${renderChampionAggregateTable(stats.perChampion)}
+    </details>`;
 }
 
 function renderPlayerDetailBody(p) {
@@ -172,7 +210,7 @@ function renderPlayerDetailBody(p) {
         <span>최근 ${RECENT_GAMES_COUNT}경기</span>
         <button type="button" id="recentStatsBtn" data-id="${p.id}">${p.recentStats ? '새로고침' : '불러오기'}</button>
       </div>
-      <div class="recent-stats-body" id="recentStatsBody">${renderRecentStatsTable(p.recentStats, p.recentStatsFetchedAt)}</div>
+      <div class="recent-stats-body" id="recentStatsBody">${renderRecentStatsBody(p.recentStats, p.recentStatsFetchedAt)}</div>
     </div>
     <a class="opgg-btn player-detail-opgg" href="${p.opggUrl}" target="_blank" rel="noopener">op.gg에서 전체 전적 보기</a>
   `;
@@ -197,7 +235,7 @@ document.getElementById('playerDetailBody').addEventListener('click', async (e) 
   bodyEl.innerHTML = '<p class="muted">불러오는 중... (최근 경기를 하나씩 조회하고 있어요)</p>';
   try {
     const result = await api(`/api/players/${id}/recent-stats${isRefresh ? '?force=1' : ''}`, { method: 'POST' });
-    bodyEl.innerHTML = renderRecentStatsTable(result.stats, result.fetchedAt);
+    bodyEl.innerHTML = renderRecentStatsBody(result.stats, result.fetchedAt);
     btn.textContent = '새로고침';
     const player = state.players.find((p) => String(p.id) === id);
     if (player) {
