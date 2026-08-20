@@ -28,7 +28,8 @@ npm start
 
 - `server.js` — Express 앱 엔트리포인트. `public/` 정적 서빙, `/api/champions`(Data Dragon 프록시), `/api/players`, `/api/series`, `/api/stats` 라우트 마운트.
 - `db.js` — SQLite 연결 및 스키마(`players`, `series`, `series_rosters`, `sets`, `set_participants`, `set_bans`). `DB_PATH` 환경변수로 파일 위치 지정(기본 `./data/lol-record-indun.db`), 없는 디렉토리는 자동 생성.
-- `lib/riot.js` — Riot 공식 API 클라이언트. Account-v1(`asia` 라우팅)으로 riotId→PUUID, Summoner-v4/League-v4/Champion-Mastery-v4(`kr` 라우팅)로 티어·숙련도 상위 3개 조회. `RIOT_API_KEY` 환경변수 필요(없으면 참가자 등록/새로고침 API가 에러 반환).
+- `lib/riot.js` — Riot 공식 API 클라이언트. Account-v1(`asia` 라우팅)으로 riotId→PUUID, League-v4/Champion-Mastery-v4(`kr` 라우팅, 둘 다 **by-puuid**)로 티어·숙련도 상위 3개 조회. `RIOT_API_KEY` 환경변수 필요(없으면 참가자 등록/새로고침 API가 에러 반환).
+  - **2026-08-20 버그 수정**: 원래 `summoner-v4`로 암호화된 summonerId를 받아 `league-v4`(`by-summoner`)를 호출했는데, Riot API가 `summoner-v4` 응답에서 `id` 필드를 더 이상 내려주지 않게 바뀌어서 `by-summoner/undefined` 호출이 되며 403이 발생했음. `league-v4`가 이제 `by-puuid`도 지원해서 summoner-v4 호출 자체를 없애고 puuid로 직접 조회하도록 변경(`players.summoner_id` 컬럼도 함께 제거).
 - `lib/dataDragon.js` — Riot Data Dragon(`ddragon.leagueoflegends.com`)에서 최신 패치의 챔피언 목록(한글명+이미지 URL)을 가져와 6시간 캐싱. API 키 불필요.
 - `lib/fearless.js` — `getUsedChampionIds(seriesId, beforeSetNumber)`: 같은 시리즈의 이전 세트들에서 밴/픽으로 쓰인 챔피언 id 집합을 반환. 피어리스 드래프트(이번 시즌 LCK 방식 — 한 시리즈 내에서 이미 쓴 챔피언은 이후 세트에서 밴/픽 불가) 검증에 사용.
 - `routes/players.js` — 참가자 등록(Riot API 조회 후 upsert)/목록/새로고침/삭제. op.gg 링크는 `https://op.gg/lol/summoners/kr/{gameName}-{tagLine}` 형태로 생성만 하고 스크래핑은 하지 않음(ToS 이슈 회피).
@@ -47,10 +48,10 @@ npm start
 - **서버**: 이 저장소는 indun.cloud와 같은 AWS EC2(Amazon Linux 2023)에서 개발됨. 실제 운영은 이 서버의 **k3s 클러스터**(별도 인프라 랩 프로젝트로 구축) 위에서 돎 — 기존 indun처럼 systemd가 아님.
 - **컨테이너**: `Dockerfile`(node:18-alpine, better-sqlite3 소스 빌드를 위해 python3/make/g++ 설치). 이미지는 **GitHub Actions**(`.github/workflows/build.yml`)가 main 브랜치 push마다 빌드해서 `ghcr.io/qpdb7179/lol-record-indun`(`:latest`, `:<sha>`)로 푸시. 이 서버엔 docker가 없어서(containerd만 있음) 로컬 빌드 대신 이 방식을 씀.
 - **k8s 매니페스트**: 앱 코드는 이 repo, k8s 리소스(Deployment/Service/PVC/ArgoCD Application)는 별도 GitOps repo `k3s-lab`(`/root/k3s-lab`, `github.com/qpdb7179/k3s-lab`)의 `manifests/lol-record-indun/`에 있음. ArgoCD가 그 repo를 보고 자동 동기화.
-- **네트워크**: k3s의 Traefik/ServiceLB는 기존 nginx(indun.cloud가 80/443 사용 중)와 충돌 방지를 위해 비활성화된 상태 → 이 앱은 **NodePort 30081**로 노출, nginx(`/etc/nginx/conf.d/indun.conf`)가 `lol-record-indun.indun.cloud` → `127.0.0.1:30081`로 리버스 프록시.
+- **네트워크**: k3s의 Traefik/ServiceLB는 기존 nginx(indun.cloud가 80/443 사용 중)와 충돌 방지를 위해 비활성화된 상태 → 이 앱은 **NodePort 30081**로 노출, nginx(`/etc/nginx/conf.d/lol-record-indun.conf`)가 `lol-record.indun.site` → `127.0.0.1:30081`로 리버스 프록시.
 - **DB 영속화**: SQLite 파일은 k3s PVC(local-path-provisioner, 이 노드에 로컬 저장)에 저장. 단일 노드 클러스터라 파드가 재시작돼도 유지되지만, EC2 인스턴스 자체가 삭제되면 함께 사라짐(별도 백업 없음 — 향후 개선 여지로 남겨둠).
 - **Riot API 키**: `RIOT_API_KEY`는 git에 커밋하지 않고 k8s Secret으로 관리(서버에서 `kubectl create secret` 직접 실행). 초기엔 Personal(개발자) 키로 시작(24시간 만료, 수동 갱신 필요) — Production Key는 신청 후 승인되면 같은 방식으로 Secret 값만 교체.
-- **DNS**: 이 서버엔 AWS 자격증명이 없어 Claude가 Route53 레코드를 직접 못 만듦 — `lol-record-indun.indun.cloud` A레코드는 사용자가 직접 추가해야 함.
+- **DNS**: 이 서버엔 AWS 자격증명이 없어 Claude가 Route53 레코드를 직접 못 만듦 — `lol-record.indun.site` A레코드는 사용자가 직접 추가해야 함.
 
 ## 진행 상황 로그 (Status Log)
 

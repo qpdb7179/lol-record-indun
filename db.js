@@ -15,7 +15,6 @@ CREATE TABLE IF NOT EXISTS players (
   riot_game_name TEXT NOT NULL,
   riot_tag_line TEXT NOT NULL,
   puuid TEXT,
-  summoner_id TEXT,
   current_tier TEXT,
   current_rank TEXT,
   current_lp INTEGER,

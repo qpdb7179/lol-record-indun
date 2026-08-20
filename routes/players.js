@@ -17,17 +17,16 @@ router.post('/', async (req, res) => {
     const profile = await fetchPlayerProfile(gameName.trim(), tagLine.trim());
     const now = new Date().toISOString();
     db.prepare(`
-      INSERT INTO players (riot_game_name, riot_tag_line, puuid, summoner_id, current_tier, current_rank, current_lp, top_champions_json, last_synced_at)
-      VALUES (@gameName, @tagLine, @puuid, @summonerId, @tier, @rank, @leaguePoints, @topChampionsJson, @now)
+      INSERT INTO players (riot_game_name, riot_tag_line, puuid, current_tier, current_rank, current_lp, top_champions_json, last_synced_at)
+      VALUES (@gameName, @tagLine, @puuid, @tier, @rank, @leaguePoints, @topChampionsJson, @now)
       ON CONFLICT(riot_game_name, riot_tag_line) DO UPDATE SET
-        puuid = excluded.puuid, summoner_id = excluded.summoner_id, current_tier = excluded.current_tier,
+        puuid = excluded.puuid, current_tier = excluded.current_tier,
         current_rank = excluded.current_rank, current_lp = excluded.current_lp,
         top_champions_json = excluded.top_champions_json, last_synced_at = excluded.last_synced_at
     `).run({
       gameName: profile.gameName,
       tagLine: profile.tagLine,
       puuid: profile.puuid,
-      summonerId: profile.summonerId,
       tier: profile.tier,
       rank: profile.rank,
       leaguePoints: profile.leaguePoints,
@@ -50,9 +49,9 @@ router.post('/:id/refresh', async (req, res) => {
     const profile = await fetchPlayerProfile(player.riot_game_name, player.riot_tag_line);
     const now = new Date().toISOString();
     db.prepare(`
-      UPDATE players SET puuid=?, summoner_id=?, current_tier=?, current_rank=?, current_lp=?, top_champions_json=?, last_synced_at=?
+      UPDATE players SET puuid=?, current_tier=?, current_rank=?, current_lp=?, top_champions_json=?, last_synced_at=?
       WHERE id = ?
-    `).run(profile.puuid, profile.summonerId, profile.tier, profile.rank, profile.leaguePoints,
+    `).run(profile.puuid, profile.tier, profile.rank, profile.leaguePoints,
       JSON.stringify(profile.topChampions), now, player.id);
     res.json(serialize(db.prepare('SELECT * FROM players WHERE id = ?').get(player.id)));
   } catch (err) {
