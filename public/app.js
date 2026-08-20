@@ -5,6 +5,9 @@ const state = {
   activeSeries: null,
   usedFromPreviousSets: new Set(),
   editingSetId: null,
+  seriesSummaries: [],
+  expandedSeriesId: null,
+  expandedSeriesData: null,
 };
 
 async function api(path, opts) {
@@ -70,7 +73,7 @@ async function loadPlayers() {
 function renderPlayers() {
   const el = document.getElementById('playerList');
   el.innerHTML = state.players.map((p) => `
-    <div class="player-card">
+    <div class="player-card" data-id="${p.id}">
       <div class="player-header">
         <div class="player-names">
           <strong class="player-riotid">${p.riotId}</strong>
@@ -81,9 +84,6 @@ function renderPlayers() {
         ${p.tier ? `<img class="tier-icon" src="${tierIconUrl(p.tier)}" alt="${p.tier}">` : ''}
         <span class="tier-badge">${p.tier ? `${p.tier} ${p.rank || ''}`.trim() : '언랭 (솔로랭크)'}</span>
       </div>
-      <div class="top-champs">
-        ${p.topChampions.map((tc) => `<img src="${championImg(tc.championId)}" title="${championLabel(tc.championId)} (Lv.${tc.championLevel})">`).join('') || '<span class="muted">숙련도 정보 없음</span>'}
-      </div>
       <div class="player-actions">
         <a class="opgg-btn" href="${p.opggUrl}" target="_blank" rel="noopener">op.gg</a>
         <button data-action="refresh" data-id="${p.id}">새로고침</button>
@@ -92,6 +92,67 @@ function renderPlayers() {
     </div>
   `).join('') || '<p class="muted">등록된 참가자가 없습니다.</p>';
 }
+
+function renderRankedQueueCard(label, tier, rank, lp, wins, losses) {
+  if (!tier) {
+    return `
+      <div class="ranked-card">
+        <div class="ranked-card-header">${label}</div>
+        <div class="ranked-card-body ranked-unranked">랭크 정보 없음</div>
+      </div>`;
+  }
+  const total = (wins || 0) + (losses || 0);
+  const winRate = total ? Math.round((wins / total) * 100) : 0;
+  return `
+    <div class="ranked-card">
+      <div class="ranked-card-header">${label}</div>
+      <div class="ranked-card-body">
+        <img class="ranked-emblem" src="${tierIconUrl(tier)}" alt="${tier}">
+        <div class="ranked-card-info">
+          <div class="ranked-tier-line">${tier} ${rank || ''}</div>
+          <div class="ranked-lp-line">${lp ?? 0} LP</div>
+        </div>
+        <div class="ranked-record">
+          <div class="ranked-wl">${wins ?? 0}W ${losses ?? 0}L</div>
+          <div class="ranked-winrate">승률 ${winRate}%</div>
+        </div>
+      </div>
+    </div>`;
+}
+
+function renderPlayerDetailBody(p) {
+  return `
+    ${renderRankedQueueCard('솔로랭크', p.tier, p.rank, p.leaguePoints, p.wins, p.losses)}
+    ${renderRankedQueueCard('자유랭크', p.flexTier, p.flexRank, p.flexLeaguePoints, p.flexWins, p.flexLosses)}
+    <div class="mastery-card">
+      <div class="ranked-card-header">숙련도 Top 3</div>
+      <div class="mastery-list">
+        ${p.topChampions.length ? p.topChampions.map((tc) => `
+          <div class="mastery-row">
+            <img class="mastery-champ-img" src="${championImg(tc.championId)}" alt="${championLabel(tc.championId)}">
+            <div class="mastery-info">
+              <div class="mastery-champ-name">${championLabel(tc.championId)}</div>
+              <div class="mastery-points">Lv.${tc.championLevel} · ${tc.championPoints.toLocaleString()}점</div>
+            </div>
+          </div>`).join('') : '<p class="muted">숙련도 정보 없음</p>'}
+      </div>
+    </div>
+    <a class="opgg-btn player-detail-opgg" href="${p.opggUrl}" target="_blank" rel="noopener">op.gg에서 전체 전적 보기</a>
+  `;
+}
+
+function openPlayerDetail(player) {
+  document.getElementById('playerDetailTitle').textContent = playerDisplay(player);
+  document.getElementById('playerDetailBody').innerHTML = renderPlayerDetailBody(player);
+  document.getElementById('playerDetailModal').classList.remove('hidden');
+}
+function closePlayerDetail() {
+  document.getElementById('playerDetailModal').classList.add('hidden');
+}
+document.getElementById('closePlayerDetail').addEventListener('click', closePlayerDetail);
+document.getElementById('playerDetailModal').addEventListener('click', (e) => {
+  if (e.target.id === 'playerDetailModal') closePlayerDetail();
+});
 
 document.getElementById('playerForm').addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -110,23 +171,31 @@ document.getElementById('playerForm').addEventListener('submit', async (e) => {
 });
 
 document.getElementById('playerList').addEventListener('click', async (e) => {
-  const btn = e.target.closest('button');
-  if (!btn) return;
-  const id = btn.dataset.id;
-  if (btn.dataset.action === 'refresh') {
-    btn.disabled = true;
-    try {
-      await api(`/api/players/${id}/refresh`, { method: 'POST' });
+  const actionBtn = e.target.closest('button[data-action]');
+  if (actionBtn) {
+    const id = actionBtn.dataset.id;
+    if (actionBtn.dataset.action === 'refresh') {
+      actionBtn.disabled = true;
+      try {
+        await api(`/api/players/${id}/refresh`, { method: 'POST' });
+        await loadPlayers();
+      } catch (err) {
+        alert(err.message);
+      } finally {
+        actionBtn.disabled = false;
+      }
+    } else if (actionBtn.dataset.action === 'delete') {
+      if (!confirm('삭제할까요?')) return;
+      await api(`/api/players/${id}`, { method: 'DELETE' });
       await loadPlayers();
-    } catch (err) {
-      alert(err.message);
-    } finally {
-      btn.disabled = false;
     }
-  } else if (btn.dataset.action === 'delete') {
-    if (!confirm('삭제할까요?')) return;
-    await api(`/api/players/${id}`, { method: 'DELETE' });
-    await loadPlayers();
+    return;
+  }
+  if (e.target.closest('a')) return; // op.gg 링크는 그냥 새 탭으로 이동
+  const card = e.target.closest('.player-card');
+  if (card) {
+    const player = state.players.find((p) => String(p.id) === card.dataset.id);
+    if (player) openPlayerDetail(player);
   }
 });
 
@@ -538,20 +607,64 @@ function renderGameTeamColumn(side, team, bans, won) {
 }
 
 async function loadSeriesList() {
-  const list = await api('/api/series');
+  state.seriesSummaries = await api('/api/series');
+  renderSeriesList();
+}
+
+function renderSeriesList() {
   const el = document.getElementById('seriesList');
-  el.innerHTML = list.map((s) => `
-    <li>
-      <button class="series-link" data-id="${s.id}">
-        ${s.matchDate} · ${s.format.toUpperCase()} · ${s.status === 'completed' ? `종료(로스터 ${s.winnerRoster} 승)` : '진행중'}
+  el.innerHTML = state.seriesSummaries.map((s) => `
+    <li class="series-list-item">
+      <button class="series-link" data-id="${s.id}" data-status="${s.status}">
+        <span>${s.matchDate} · ${s.format.toUpperCase()} · ${s.status === 'completed' ? `종료(로스터 ${s.winnerRoster} 승)` : '진행중'}</span>
+        <span class="series-link-chevron">${state.expandedSeriesId === s.id ? '▲' : '▼'}</span>
       </button>
+      <div class="series-expand">${state.expandedSeriesId === s.id && state.expandedSeriesData ? renderSeriesCard(state.expandedSeriesData) : ''}</div>
     </li>`).join('') || '<li class="muted">기록된 시리즈가 없습니다.</li>';
 }
+
 document.getElementById('seriesList').addEventListener('click', async (e) => {
-  const btn = e.target.closest('.series-link');
-  if (!btn) return;
-  state.activeSeries = await api(`/api/series/${btn.dataset.id}`);
-  await renderActiveSeries();
+  const linkBtn = e.target.closest('.series-link');
+  if (linkBtn) {
+    const id = Number(linkBtn.dataset.id);
+    if (linkBtn.dataset.status === 'in_progress') {
+      // 진행중인 시리즈는 계속 입력해야 하니 상단 입력 영역으로
+      state.activeSeries = await api(`/api/series/${id}`);
+      state.editingSetId = null;
+      await renderActiveSeries();
+      document.getElementById('activeSeries').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      return;
+    }
+    // 완료된 시리즈는 스크롤 이동 없이 목록 안에서 그 자리에 펼침(아코디언)
+    if (state.expandedSeriesId === id) {
+      state.expandedSeriesId = null;
+      state.expandedSeriesData = null;
+    } else {
+      state.expandedSeriesData = await api(`/api/series/${id}`);
+      state.expandedSeriesId = id;
+    }
+    renderSeriesList();
+    return;
+  }
+
+  const delBtn = e.target.closest('.delete-series-btn');
+  if (delBtn) {
+    if (!confirm('이 시리즈를 삭제할까요? 되돌릴 수 없습니다.')) return;
+    await api(`/api/series/${delBtn.dataset.id}`, { method: 'DELETE' });
+    state.expandedSeriesId = null;
+    state.expandedSeriesData = null;
+    await loadSeriesList();
+    return;
+  }
+
+  const editBtn = e.target.closest('.edit-game-btn');
+  if (editBtn) {
+    // 목록 안에서 펼쳐진 걸 수정하려면 상단 입력 영역으로 끌어올림(편집 폼은 거기서만 렌더)
+    state.activeSeries = state.expandedSeriesData;
+    state.editingSetId = Number(editBtn.dataset.setId);
+    await renderActiveSeries();
+    document.getElementById('activeSeries').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
 });
 
 // ---- 통계 ----

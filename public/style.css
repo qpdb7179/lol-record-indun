@@ -39,7 +39,8 @@ button:hover { background: var(--border); }
 select option { background: var(--input-bg); color: var(--text); }
 
 #playerList { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
-.player-card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 12px; }
+.player-card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 12px; cursor: pointer; }
+.player-card:hover { border-color: var(--border-strong); }
 .player-header { margin-bottom: 8px; }
 .player-names { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .player-riotid { overflow-wrap: break-word; }
@@ -47,7 +48,6 @@ select option { background: var(--input-bg); color: var(--text); }
 .player-tier { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
 .tier-icon { width: 22px; height: 22px; }
 .tier-badge { font-size: 12px; background: var(--input-bg); border: 1px solid var(--border); padding: 2px 8px; border-radius: 999px; }
-.top-champs img { width: 32px; height: 32px; border-radius: 50%; margin-right: 4px; }
 .player-actions { margin-top: 8px; display: flex; gap: 8px; font-size: 13px; align-items: center; }
 .opgg-btn {
   display: inline-block; text-decoration: none; color: var(--text); background: var(--input-bg);
@@ -91,7 +91,9 @@ select option { background: var(--input-bg); color: var(--text); }
 
 #seriesList { list-style: none; padding: 0; }
 #seriesList li { margin-bottom: 4px; }
-.series-link { width: 100%; text-align: left; }
+.series-link { width: 100%; text-align: left; display: flex; justify-content: space-between; align-items: center; }
+.series-link-chevron { color: var(--muted); font-size: 11px; }
+.series-expand:not(:empty) { margin: 4px 0 12px; }
 
 table { width: 100%; border-collapse: collapse; margin-bottom: 24px; background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
 th, td { border-bottom: 1px solid var(--border); padding: 8px; text-align: left; font-size: 13px; }
@@ -111,6 +113,32 @@ tbody tr:hover { background: var(--input-bg); }
 .champion-grid-item span { font-size: 11px; text-align: center; line-height: 1.2; color: var(--text); }
 .champion-grid-item:hover:not(:disabled) { border-color: var(--color-blue); background: var(--input-bg); }
 .champion-grid-item:disabled { opacity: 0.25; cursor: not-allowed; }
+
+/* ---- 참가자 상세 모달 ---- */
+.modal.player-detail-modal { background: var(--card-bg); border: 1px solid var(--border-strong); border-radius: 10px; width: min(420px, 92vw); max-height: 85vh; display: flex; flex-direction: column; overflow: hidden; }
+.modal.player-detail-modal .modal-header { justify-content: space-between; }
+#closePlayerDetail { border: none; background: none; color: var(--text); font-size: 18px; padding: 0 6px; }
+.player-detail-body { overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+
+.ranked-card, .mastery-card { background: var(--card-bg-2); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.ranked-card-header { padding: 8px 12px; font-size: 12px; font-weight: 600; color: var(--muted); border-bottom: 1px solid var(--border); }
+.ranked-card-body { display: flex; align-items: center; gap: 10px; padding: 12px; }
+.ranked-card-body.ranked-unranked { color: var(--muted); font-size: 13px; }
+.ranked-emblem { width: 44px; height: 44px; flex-shrink: 0; }
+.ranked-card-info { flex: 1; min-width: 0; }
+.ranked-tier-line { font-weight: 700; font-size: 14px; }
+.ranked-lp-line { font-size: 12px; color: var(--muted); }
+.ranked-record { text-align: right; flex-shrink: 0; }
+.ranked-wl { font-size: 12px; color: var(--muted); }
+.ranked-winrate { font-size: 13px; font-weight: 600; }
+
+.mastery-list { padding: 8px 12px; }
+.mastery-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; }
+.mastery-row + .mastery-row { border-top: 1px solid var(--border); }
+.mastery-champ-img { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; }
+.mastery-champ-name { font-size: 13px; font-weight: 600; }
+.mastery-points { font-size: 11px; color: var(--muted); }
+.player-detail-opgg { text-align: center; }
 
 /* ---- 시리즈/게임 카드 ---- */
 .series-card { background: var(--card-bg); color: var(--text); border: 1px solid var(--accent-gold); border-radius: 10px; padding: 16px; margin: 16px 0; }

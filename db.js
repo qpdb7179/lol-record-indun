@@ -19,6 +19,13 @@ CREATE TABLE IF NOT EXISTS players (
   current_tier TEXT,
   current_rank TEXT,
   current_lp INTEGER,
+  current_wins INTEGER,
+  current_losses INTEGER,
+  flex_tier TEXT,
+  flex_rank TEXT,
+  flex_lp INTEGER,
+  flex_wins INTEGER,
+  flex_losses INTEGER,
   top_champions_json TEXT,
   last_synced_at TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -71,10 +78,22 @@ CREATE TABLE IF NOT EXISTS set_bans (
 `);
 
 // CREATE TABLE IF NOT EXISTS는 이미 존재하는 테이블에 새 컬럼을 추가해주지 않으므로,
-// 기존 배포본에 display_name 컬럼이 없다면 여기서 보강한다.
+// 기존 배포본에 없는 컬럼이 있다면 여기서 보강한다.
 const playerColumns = db.prepare("PRAGMA table_info(players)").all().map((c) => c.name);
-if (!playerColumns.includes('display_name')) {
-  db.exec('ALTER TABLE players ADD COLUMN display_name TEXT');
+const newPlayerColumns = {
+  display_name: 'TEXT',
+  current_wins: 'INTEGER',
+  current_losses: 'INTEGER',
+  flex_tier: 'TEXT',
+  flex_rank: 'TEXT',
+  flex_lp: 'INTEGER',
+  flex_wins: 'INTEGER',
+  flex_losses: 'INTEGER',
+};
+for (const [name, type] of Object.entries(newPlayerColumns)) {
+  if (!playerColumns.includes(name)) {
+    db.exec(`ALTER TABLE players ADD COLUMN ${name} ${type}`);
+  }
 }
 
 module.exports = db;
