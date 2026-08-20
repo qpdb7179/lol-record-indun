@@ -57,6 +57,11 @@ function laneIconImg(lane) {
   return `<img class="lane-icon-img" src="${LANE_ICON_URL[lane] || ''}" alt="${LANE_LABEL[lane] || lane}" title="${LANE_LABEL[lane] || lane}">`;
 }
 
+// 솔로랭크 티어 엠블럼(Data Dragon엔 없어서 Community Dragon 미러로 로드)
+function tierIconUrl(tier) {
+  return tier ? `https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-static-assets/global/default/images/ranked-mini-crests/${tier.toLowerCase()}.svg` : null;
+}
+
 // ---- 참가자 관리 ----
 async function loadPlayers() {
   state.players = await api('/api/players');
@@ -67,14 +72,20 @@ function renderPlayers() {
   el.innerHTML = state.players.map((p) => `
     <div class="player-card">
       <div class="player-header">
-        <strong>${playerDisplay(p)}</strong>
-        <span class="tier-badge">${p.tier ? `${p.tier} ${p.rank || ''}`.trim() : '언랭'}</span>
+        <div class="player-names">
+          <strong class="player-riotid">${p.riotId}</strong>
+          ${p.displayName ? `<span class="player-realname">${p.displayName}</span>` : ''}
+        </div>
+      </div>
+      <div class="player-tier">
+        ${p.tier ? `<img class="tier-icon" src="${tierIconUrl(p.tier)}" alt="${p.tier}">` : ''}
+        <span class="tier-badge">${p.tier ? `${p.tier} ${p.rank || ''}`.trim() : '언랭 (솔로랭크)'}</span>
       </div>
       <div class="top-champs">
         ${p.topChampions.map((tc) => `<img src="${championImg(tc.championId)}" title="${championLabel(tc.championId)} (Lv.${tc.championLevel})">`).join('') || '<span class="muted">숙련도 정보 없음</span>'}
       </div>
       <div class="player-actions">
-        <a href="${p.opggUrl}" target="_blank" rel="noopener">op.gg</a>
+        <a class="opgg-btn" href="${p.opggUrl}" target="_blank" rel="noopener">op.gg</a>
         <button data-action="refresh" data-id="${p.id}">새로고침</button>
         <button data-action="delete" data-id="${p.id}">삭제</button>
       </div>
@@ -245,20 +256,19 @@ function renderTeamInputs(side, allowedPlayers, laneDefaults, options = {}) {
       </div>`;
   }).join('');
 
-  const banSlotsHtml = banDefaults.map((cid) => `
-    <span class="ban-slot-wrap">
-      <button type="button" class="champion-slot ban-slot" data-champion-id="${cid}">${championSlotInnerHtml(cid, true)}</button>
-      <button type="button" class="remove-ban" title="제거">×</button>
-    </span>`).join('');
+  // 밴은 항상 5슬롯 고정 — 각 슬롯은 실제 챔피언 또는 명시적 '없음'으로 결정해야 함
+  const banSlotsHtml = Array.from({ length: 5 }, (_, i) => {
+    const cid = banDefaults[i] || '';
+    return `<button type="button" class="champion-slot ban-slot" data-champion-id="${cid}">${championSlotInnerHtml(cid, true)}</button>`;
+  }).join('');
 
   return `
     <div class="team-block ${side}">
       <h4>${side === 'blue' ? '블루팀' : '레드팀'}${allowedPlayers ? ` <span class="muted small">${lockedLabel}</span>` : ''}</h4>
       ${rows}
       <div class="ban-section">
-        <span class="ban-label">밴</span>
+        <span class="ban-label">밴 (5개)</span>
         <span class="ban-slots">${banSlotsHtml}</span>
-        <button type="button" class="add-ban-btn" title="밴 추가">+</button>
       </div>
     </div>`;
 }
@@ -322,7 +332,8 @@ function computeDisabledChampionIds(excludeButton) {
 }
 
 function championSlotInnerHtml(championId, isBan) {
-  if (!championId) return `<span class="champion-slot-empty">${isBan ? '+' : '챔피언 선택'}</span>`;
+  if (championId === 'none') return `<span class="champion-slot-empty ban-none">없음</span>`;
+  if (!championId) return `<span class="champion-slot-empty">${isBan ? '밴 선택' : '챔피언 선택'}</span>`;
   const c = state.championById.get(Number(championId));
   return `<img src="${c.imageUrl}" class="champion-slot-img" alt="${c.name}"><span>${c.name}</span>`;
 }
@@ -336,9 +347,14 @@ function openChampionPicker(btn) {
   const searchInput = document.getElementById('championSearchInput');
   searchInput.value = '';
   renderChampionGrid('');
+  document.getElementById('noBanBtn').classList.toggle('hidden', !btn.classList.contains('ban-slot'));
   document.getElementById('championPickerModal').classList.remove('hidden');
   searchInput.focus();
 }
+document.getElementById('noBanBtn').addEventListener('click', () => {
+  setChampionSlot(pickerTargetBtn, 'none');
+  closeChampionPicker();
+});
 function closeChampionPicker() {
   pickerTargetBtn = null;
   document.getElementById('championPickerModal').classList.add('hidden');
@@ -369,31 +385,10 @@ document.getElementById('championGrid').addEventListener('click', (e) => {
   closeChampionPicker();
 });
 
-function addBanSlot(teamBlock) {
-  const wrap = document.createElement('span');
-  wrap.className = 'ban-slot-wrap';
-  wrap.innerHTML = `
-    <button type="button" class="champion-slot ban-slot" data-champion-id=""><span class="champion-slot-empty">+</span></button>
-    <button type="button" class="remove-ban" title="제거">×</button>
-  `;
-  teamBlock.querySelector('.ban-slots').appendChild(wrap);
-  openChampionPicker(wrap.querySelector('.champion-slot'));
-}
-
 document.getElementById('activeSeries').addEventListener('click', async (e) => {
-  const removeBtn = e.target.closest('.remove-ban');
-  if (removeBtn) {
-    removeBtn.closest('.ban-slot-wrap').remove();
-    return;
-  }
   const champBtn = e.target.closest('.champion-slot');
   if (champBtn) {
     openChampionPicker(champBtn);
-    return;
-  }
-  const addBanBtn = e.target.closest('.add-ban-btn');
-  if (addBanBtn) {
-    addBanSlot(addBanBtn.closest('.team-block'));
     return;
   }
   const delBtn = e.target.closest('.delete-series-btn');
@@ -444,6 +439,13 @@ async function submitSet(e, editingSetId) {
   e.preventDefault();
   const errEl = document.getElementById('setFormError');
   errEl.textContent = '';
+
+  const undecidedBans = document.querySelectorAll('#activeSeries .ban-slot[data-champion-id=""]').length;
+  if (undecidedBans > 0) {
+    errEl.textContent = '아직 정하지 않은 밴 슬롯이 있습니다. 챔피언을 고르거나 "밴 없음으로 표시"를 눌러 5개를 모두 정해주세요.';
+    return;
+  }
+
   const winner = document.querySelector('input[name="winner"]:checked')?.value;
   const payload = {
     blueTeam: collectTeam('blue'),
@@ -498,9 +500,9 @@ function renderGameCard(set) {
         <button type="button" class="edit-game-btn" data-set-id="${set.id}">수정</button>
       </div>
       <div class="game-teams">
-        ${renderGameTeamColumn('red', set.redTeam, set.bans.red, redWon)}
-        <div class="game-vs">VS</div>
         ${renderGameTeamColumn('blue', set.blueTeam, set.bans.blue, !redWon)}
+        <div class="game-vs">VS</div>
+        ${renderGameTeamColumn('red', set.redTeam, set.bans.red, redWon)}
       </div>
     </div>
   `;
@@ -510,7 +512,7 @@ function renderGameTeamColumn(side, team, bans, won) {
   const teamLabel = side === 'red' ? '레드팀' : '블루팀';
   const sortedTeam = team.slice().sort((a, b) => LANES.indexOf(a.lane) - LANES.indexOf(b.lane));
   return `
-    <div class="game-team-col ${side}">
+    <div class="game-team-col ${side} ${won ? '' : 'lose'}">
       <div class="game-team-header">
         <span class="game-team-name">${teamLabel}</span>
         <span class="badge ${won ? 'badge-win' : 'badge-lose'}">${won ? 'WIN' : 'LOSE'}</span>

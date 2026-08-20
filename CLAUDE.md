@@ -28,7 +28,7 @@ npm start
 
 - `server.js` — Express 앱 엔트리포인트. `public/` 정적 서빙, `/api/champions`(Data Dragon 프록시), `/api/players`, `/api/series`, `/api/stats` 라우트 마운트.
 - `db.js` — SQLite 연결 및 스키마(`players`, `series`, `series_rosters`, `sets`, `set_participants`, `set_bans`). `DB_PATH` 환경변수로 파일 위치 지정(기본 `./data/lol-record-indun.db`), 없는 디렉토리는 자동 생성.
-- `lib/riot.js` — Riot 공식 API 클라이언트. Account-v1(`asia` 라우팅)으로 riotId→PUUID, League-v4/Champion-Mastery-v4(`kr` 라우팅, 둘 다 **by-puuid**)로 티어·숙련도 상위 3개 조회. `RIOT_API_KEY` 환경변수 필요(없으면 참가자 등록/새로고침 API가 에러 반환).
+- `lib/riot.js` — Riot 공식 API 클라이언트. Account-v1(`asia` 라우팅)으로 riotId→PUUID, League-v4/Champion-Mastery-v4(`kr` 라우팅, 둘 다 **by-puuid**)로 티어·숙련도 상위 3개 조회. `RIOT_API_KEY` 환경변수 필요(없으면 참가자 등록/새로고침 API가 에러 반환). 티어는 **솔로랭크(`RANKED_SOLO_5x5`)만** 사용 — 없으면 다른 큐(자유랭크 등)로 대체하지 않고 그냥 언랭 처리(예전엔 `entries[0]` 폴백이 있어서 자유랭크가 솔로랭크인 것처럼 보일 수 있었음, 제거함).
   - **2026-08-20 버그 수정**: 원래 `summoner-v4`로 암호화된 summonerId를 받아 `league-v4`(`by-summoner`)를 호출했는데, Riot API가 `summoner-v4` 응답에서 `id` 필드를 더 이상 내려주지 않게 바뀌어서 `by-summoner/undefined` 호출이 되며 403이 발생했음. `league-v4`가 이제 `by-puuid`도 지원해서 summoner-v4 호출 자체를 없애고 puuid로 직접 조회하도록 변경(`players.summoner_id` 컬럼도 함께 제거).
 - `lib/dataDragon.js` — Riot Data Dragon(`ddragon.leagueoflegends.com`)에서 최신 패치의 챔피언 목록(한글명+이미지 URL)을 가져와 6시간 캐싱. API 키 불필요.
 - `lib/fearless.js` — `getUsedChampionIds(seriesId, beforeSetNumber)`: 같은 시리즈의 이전 세트들에서 밴/픽으로 쓰인 챔피언 id 집합을 반환. 피어리스 드래프트(이번 시즌 LCK 방식 — 한 시리즈 내에서 이미 쓴 챔피언은 이후 세트에서 밴/픽 불가) 검증에 사용.
@@ -50,8 +50,10 @@ npm start
   - **2세트 이후 기본 배정**: `laneMapFromLastSet()`으로 직전 세트에 그 로스터가 서 있던 라인을 그대로 기본값으로 채워줌(드래그로 바꿀 수 있음). 이때 로스터 항목은 `{playerId, riotId, displayName}` 형태라 `state.players`의 `{id, ...}`와 필드명이 달라서, `renderTeamInputs`에서 `id: p.id ?? p.playerId`로 통일해야 함 — **한 번 여기서 실제로 버그 났었음**(값이 `"undefined"` 문자열로 들어가 2세트 폼이 통째로 깨짐), 이 필드 통일 없이 로스터 배열을 직접 select 옵션에 넣지 말 것.
   - **게임(세트) 수정**: `renderGameCard()`가 **모든** 게임 카드에 "수정" 버튼을 그림(백엔드가 어느 세트든 수정 허용하도록 확장됨 — 아래 상태 로그 참고). 클릭 시 `state.editingSetId` 설정 → `renderActiveSeries()`가 "다음 세트 입력" 폼 대신 그 세트의 기존 데이터로 채운 편집 폼을 렌더(`renderTeamInputs`에 `includeChampionDefaults:true`, `banDefaults`로 기존 값 프리필, `allowedPlayers`는 그 세트의 고정 `blueTeam`/`redTeam`이라 라인만 바꿀 수 있음). 저장은 `submitSet(e, editingSetId)`가 `editingSetId` 유무로 POST(새 세트)/PUT(수정)을 분기. 피어리스 비활성화 조회는 `beforeSet`이 아니라 `excludeSet=<setId>`로 호출(수정 중인 세트를 제외한 시리즈 전체와 비교해야 하므로 — 생성 흐름의 "이전 세트만" 조회와 파라미터가 다름, 헷갈리지 말 것).
   - **라인 아이콘**: Data Dragon엔 포지션 아이콘이 없어서 Community Dragon 미러(`raw.communitydragon.org/.../svg/position-{top,jungle,middle,bottom,utility}.svg`)에서 로드 — 라이엇 클라이언트가 실제로 쓰는 자산이지만 라이엇이 직접 운영하는 도메인은 아님(Data Dragon처럼 공식 문서화된 API가 아니라 게임 파일 추출 미러라는 점 인지하고 있을 것 — 만약 나중에 이 미러가 죽으면 `LANE_ICON_URL`만 교체하면 됨).
+  - **티어 엠블럼**: 같은 이유로 Community Dragon `.../images/ranked-mini-crests/{tier}.svg`에서 로드(`tierIconUrl()`, tier는 소문자로 변환해서 사용).
+  - **밴 슬롯(고정 5개 + '없음')**: 원래 `+` 버튼으로 자유롭게 추가/제거하던 방식이었는데, 추가했다가 밴을 안 하고 나가면 이유 없이 제거(×) 아이콘만 남는 문제로 사용자가 혼란스러워함 → 팀당 항상 5슬롯을 고정으로 렌더(`renderTeamInputs`에서 `Array.from({length:5}, ...)`)하고, 각 슬롯은 실제 챔피언 또는 문자열 `'none'`(명시적 "없음")으로 결정해야 함. `'none'`은 챔피언 피커 모달의 `#noBanBtn`("밴 없음으로 표시", 밴 슬롯을 열 때만 보임)으로 설정. `submitSet()`이 제출 전에 `.ban-slot[data-champion-id=""]`(아직 미결정)가 하나라도 있으면 막음 — `collectBans()`는 `Number('none')`이 `NaN`이라 자동으로 걸러져서 실제로 밴한 챔피언만 서버로 감(별도 분기 처리 불필요).
 - `public/style.css` — 전체 다크 테마(`/root/example.png` 참고, 헤더/탭/폼/참가자카드/통계 테이블까지 전부 다크 톤 통일). 시리즈 카드만 골드 테두리(`--accent-gold`)로 살짝 강조.
-  - **시리즈/게임 카드(다크 UI)**: `renderSeriesCard()`/`renderGameCard()` — `/root/example.png` 참고해서 만든 다크 테마. 상단 배지(포맷/피어리스(하드) 고정 표기/스코어/날짜/상태/삭제), 게임별로 레드(왼쪽 고정)-VS-블루(오른쪽 고정) 컬럼(그날의 실제 진영 기준, 로스터 기준 아님), 밴 아이콘 행, 라인 아이콘(SVG, `LANE_ICONS`)+챔프 원형 아바타+선수명(표시이름)+챔프명. **주의**: 게임별로 "레드팀"이 항상 왼쪽인 건 색 기준 레이아웃이고, 상단 스코어(`X - Y`)는 로스터 A/B 기준이라 서로 축이 다름 — 의도적 설계(레퍼런스 이미지와 동일한 방식).
+  - **시리즈/게임 카드(다크 UI)**: `renderSeriesCard()`/`renderGameCard()` — `/root/example.png` 참고해서 만든 다크 테마. 상단 배지(포맷/피어리스(하드) 고정 표기/스코어/날짜/상태/삭제), 게임별로 **블루(왼쪽 고정)-VS-레드(오른쪽 고정)** 컬럼(그날의 실제 진영 기준, 로스터 기준 아님 — 밴픽 입력 폼과 좌우 배치를 통일해달라는 피드백으로 2026-08-20에 레드↔블루 순서를 뒤집음, 아래 상태 로그 참고) + 패배팀은 챔프 아바타/밴 아이콘/선수명·챔프명을 `opacity:0.4`로 흐리게 처리(`.game-team-col.lose`)해서 승리팀 강조. 밴 아이콘 행, 라인 아이콘(`laneIconImg()`, Community Dragon 이미지)+챔프 원형 아바타+선수명(표시이름)+챔프명. 상단 스코어(`X - Y`)는 로스터 A/B 기준이라 레드/블루 축과는 다르다는 점은 여전함 — 의도적 설계.
 
 ### 데이터 모델 요약
 `players`(riot 계정+티어+숙련도 캐시) → `series`(날짜+포맷+상태) → `series_rosters`(시리즈별 로스터 A/B 고정) → `sets`(세트별 블루/레드 로스터+승자) → `set_participants`(세트별 선수-라인-챔프) / `set_bans`(세트별 밴 목록).
@@ -81,3 +83,11 @@ npm start
   1. 피어리스: `getUsedChampionIds`(이전 세트만) 대신 `getUsedChampionIdsExcludingSet`(이 세트 제외 전체)로 교체 — 수정한 챔프가 이후 세트와 충돌하는 것도 잡아야 하므로.
   2. 승자 변경 시 "시리즈가 더 이른 세트에서 이미 끝났어야 하는데 그 뒤 세트가 실제 존재하는" 모순 상태 — 세트 번호 순으로 승수 시뮬레이션해서 그런 경우면 400으로 거부(사용자에게 그 뒤 세트부터 먼저 지우라고 안내).
   프론트는 모든 게임 카드에 "수정" 버튼을 띄우도록 변경, 피어리스 조회 파라미터도 `beforeSet`→`excludeSet`으로 교체. curl로 중간 세트 챔피언 수정 성공/피어리스 충돌 거부/모순되는 승자 변경 거부 3가지, Playwright로 3게임 전부에 수정 버튼 뜨고 실제 폼이 여는지까지 확인 후 배포.
+- **2026-08-20**: UI 세부 피드백 6건 반영 —
+  1. 결과 카드도 밴픽 입력 폼처럼 **블루팀을 항상 왼쪽**에 배치(기존엔 레드가 왼쪽이라 입력 폼과 좌우가 안 맞았음).
+  2. 패배팀은 챔프 아바타/밴 아이콘/이름을 `opacity:0.4`로 흐리게 처리해 승리팀 강조(`.game-team-col.lose`).
+  3. 밴을 **고정 5슬롯 + 명시적 "없음"** 방식으로 재설계, 5개를 다 정하기 전엔 제출 차단.
+  4. 위 3번 재설계로 "밴 추가 후 취소하면 이유 없이 × 아이콘만 남는" 문제도 자연히 해결(그 UI 자체를 없앴으므로).
+  5. 참가자 카드에서 표시이름을 넣으면 `...`으로 잘려 보이던 문제 수정 — riotId/표시이름을 한 줄에 욱여넣지 않고 줄바꿈해서 분리(`player-riotid`/`player-realname`).
+  6. op.gg 링크를 버튼 스타일로(`opgg-btn`), 솔로랭크 전용으로 티어를 가져오도록 명확히 하고(`lib/riot.js`) 티어 엠블럼 이미지도 같이 표시(`tierIconUrl()`).
+  Playwright로 6가지 전부(블루 왼쪽 배치, 패배팀 opacity 0.4 실측, 밴 5슬롯+없음 옵션+미완료 시 제출 차단, 긴 표시이름 안 잘림, 실제 챌린저 계정으로 솔로랭크 티어+엠블럼 로드) 확인 후 배포.
