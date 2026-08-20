@@ -21,7 +21,7 @@ header h1 { font-size: 18px; margin: 0; color: var(--text); }
 nav { display: flex; gap: 8px; }
 .tab-btn { padding: 8px 16px; border: 1px solid var(--border); background: var(--input-bg); color: var(--text); border-radius: 6px; cursor: pointer; }
 .tab-btn.active { background: var(--color-blue); color: #fff; border-color: var(--color-blue); }
-main { max-width: 1000px; margin: 24px auto; padding: 0 16px 48px; }
+main { max-width: 1000px; margin: 24px 0 24px 24px; padding: 0 16px 48px; }
 .tab-panel { display: none; }
 .tab-panel.active { display: block; }
 .muted { color: var(--muted); }
@@ -30,6 +30,7 @@ main { max-width: 1000px; margin: 24px auto; padding: 0 16px 48px; }
 h3 { color: var(--text); }
 
 #playerForm { display: flex; gap: 8px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
+#displayNameInput { min-width: 220px; }
 
 .new-series-card { background: var(--card-bg); border: 1px solid var(--accent-gold); border-radius: 10px; padding: 16px; margin-bottom: 20px; }
 .new-series-title { margin: 0 0 12px; font-size: 15px; }
@@ -48,7 +49,8 @@ button { cursor: pointer; background: var(--input-bg); color: var(--text); }
 button:hover { background: var(--border); }
 select option { background: var(--input-bg); color: var(--text); }
 
-#playerList { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+/* 카드 폭을 고정해서(1fr로 늘어나지 않게) 인원 수와 무관하게 항상 왼쪽부터 균일한 크기로 채워지게 함 */
+#playerList { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 220px)); gap: 12px; }
 .player-card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 12px; cursor: pointer; }
 .player-card:hover { border-color: var(--border-strong); }
 .player-header { margin-bottom: 8px; }
