@@ -116,3 +116,7 @@ npm start
   - `lib/riot.js`: `participantSummary()`로 `myTeam`/`enemyTeam`을 챔피언ID 배열 대신 `{championId, riotId, kills, deaths, assists, cs, win}` 객체 배열로 확장. `riotIdGameName`/`riotIdTagline`이 실제 Riot API 필드명(대소문자 주의, `riotIdTagLine`이 아니라 `riotIdTagline`).
   - `public/app.js`: `.match-row` 클릭 시 `state.expandedMatchId` 토글 → `renderMatchDetailPanel()`이 그 경기 아래에 우리팀/상대팀 2열 스코어보드를 삽입(재클릭하면 접힘, 다른 경기 클릭하면 그쪽으로 전환). 본인 행은 `riotId` 일치로 찾아서 파란 배경 강조(`score-me`) — 등록된 참가자 본인의 riotId와 그 경기 참가자의 riotId를 문자열 비교.
   Playwright로 10행 렌더/재클릭 시 접힘/본인 강조(정확히 1명, riotId 일치) 확인 후 배포.
+- **2026-08-20**: 사용자 버그 리포트 2건 + 정리 요청 —
+  1. 스코어보드에서 우리팀/상대팀 닉네임이 길면 반대쪽 KDA/CS가 화면 밖으로 밀려나가던 문제 — `.match-detail`(2컬럼 그리드)의 자식인 `.match-detail-team`에 `min-width:0`이 없어서 grid 기본값(`min-width:auto`, 즉 내용물의 min-content 크기)이 컬럼을 강제로 넓히던 것. `.player-detail-body`/`.champion-grid` 때 겪었던 flex-shrink 함정과 **완전히 같은 계열의 버그(그리드 버전)** — 그리드/플렉스 자식에 텍스트 오버플로우 처리를 맡기려면 그 자식 자체에도 `min-width:0`(세로면 `min-height:0`)을 반드시 같이 줘야 함, 안 그러면 `overflow:hidden`/`text-overflow:ellipsis`가 있어도 무용지물이라는 걸 또 확인함 — 이 프로젝트에서 세 번째로 겪은 동일 패턴이라 CLAUDE.md에 명확히 남겨둠.
+  2. 날짜 입력 후 습관적으로 엔터를 치면 "새 시리즈 시작" 버튼을 안 눌러도 폼이 그냥 제출되던 문제(HTML 폼의 기본 동작 — 텍스트/날짜 인풋에서 엔터 = 제출) → `#seriesForm`에 `keydown` 리스너를 추가해서 타깃이 `<button>`이 아닌 엔터는 `preventDefault()`로 막음. 이 버그 때문에 쌓인 빈 시리즈 17개(세트 하나도 없는 것들)를 라이브에서 전부 `DELETE /api/series/:id`로 정리.
+  Playwright로 (a) 엔터로는 안 생기고 버튼 클릭으로만 생기는지, (b) 극단적으로 긴 닉네임 양쪽에 강제로 주입해서 가로 스크롤/밀림 없이 "..."로 잘리는지(scrollWidth===clientWidth로 확인) 검증 후 배포.

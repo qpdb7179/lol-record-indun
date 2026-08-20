@@ -174,6 +174,7 @@ tbody tr:hover { background: var(--input-bg); }
 .match-team-sep { font-size: 10px; color: var(--muted); }
 
 .match-detail { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 8px 6px 8px 16px; margin-top: -2px; }
+.match-detail-team { min-width: 0; } /* 그리드 아이템 기본 min-width:auto라 긴 닉네임이 컬럼을 밀어내던 것 방지 */
 .match-detail-team-label { font-size: 11px; color: var(--muted); margin-bottom: 4px; }
 .score-row { display: flex; align-items: center; gap: 6px; padding: 3px 4px; border-radius: 4px; font-size: 11px; }
 .score-row.score-me { background: rgba(77, 130, 243, 0.15); font-weight: 700; }

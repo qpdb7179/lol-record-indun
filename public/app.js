@@ -339,6 +339,14 @@ document.getElementById('playerList').addEventListener('click', async (e) => {
 });
 
 // ---- 전적 기록 ----
+// 날짜 입력 중 엔터를 치면(날짜 선택 후 습관적으로 누르는 경우가 많음) 브라우저 기본 동작으로
+// 폼이 그냥 제출돼서 "새 시리즈 시작" 버튼을 안 눌러도 시리즈가 생기던 문제 — 버튼 자체에서
+// 누른 엔터만 허용하고 나머지 입력 필드에서의 엔터는 막음.
+document.getElementById('seriesForm').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && e.target.tagName !== 'BUTTON') {
+    e.preventDefault();
+  }
+});
 document.getElementById('seriesForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const matchDate = document.getElementById('matchDateInput').value;
