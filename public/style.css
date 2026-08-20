@@ -1,50 +1,66 @@
 :root {
-  --color-blue: #2f6feb;
-  --color-red: #d64545;
-  --bg: #f7f8fa;
-  --card-bg: #fff;
-  --border: #e1e4e8;
-  --text: #1f2328;
-  --muted: #6a737d;
+  --color-blue: #4d82f3;
+  --color-blue-text: #8fb4ff;
+  --color-red: #e05a5a;
+  --color-red-text: #ff8f8f;
+  --bg: #0b0f1a;
+  --card-bg: #12182b;
+  --card-bg-2: #0e1424;
+  --input-bg: #171d30;
+  --border: #232a42;
+  --border-strong: #2f3752;
+  --accent-gold: #caa24a;
+  --text: #e6e8ef;
+  --muted: #8891a8;
 }
 * { box-sizing: border-box; }
 body { margin: 0; font-family: -apple-system, "Malgun Gothic", sans-serif; background: var(--bg); color: var(--text); }
 header { background: var(--card-bg); border-bottom: 1px solid var(--border); padding: 16px 24px; display: flex; align-items: center; gap: 24px; }
-header h1 { font-size: 18px; margin: 0; }
+header h1 { font-size: 18px; margin: 0; color: var(--text); }
 nav { display: flex; gap: 8px; }
-.tab-btn { padding: 8px 16px; border: 1px solid var(--border); background: var(--card-bg); border-radius: 6px; cursor: pointer; }
+.tab-btn { padding: 8px 16px; border: 1px solid var(--border); background: var(--input-bg); color: var(--text); border-radius: 6px; cursor: pointer; }
 .tab-btn.active { background: var(--color-blue); color: #fff; border-color: var(--color-blue); }
-main { max-width: 960px; margin: 24px auto; padding: 0 16px 48px; }
+main { max-width: 1000px; margin: 24px auto; padding: 0 16px 48px; }
 .tab-panel { display: none; }
 .tab-panel.active { display: block; }
 .muted { color: var(--muted); }
-.error { color: var(--color-red); min-height: 1.2em; }
+.error { color: var(--color-red-text); min-height: 1.2em; }
 
-#playerForm, #seriesForm { display: flex; gap: 8px; align-items: center; margin-bottom: 16px; }
-input, select, button { font-size: 14px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; }
-button { cursor: pointer; background: var(--card-bg); }
-button:hover { background: var(--bg); }
+h3 { color: var(--text); }
+
+#playerForm, #seriesForm { display: flex; gap: 8px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
+input, select, button {
+  font-size: 14px; padding: 6px 10px; border: 1px solid var(--border-strong); border-radius: 6px;
+  background: var(--input-bg); color: var(--text);
+}
+input::placeholder { color: var(--muted); }
+button { cursor: pointer; background: var(--input-bg); color: var(--text); }
+button:hover { background: var(--border); }
+select option { background: var(--input-bg); color: var(--text); }
 
 #playerList { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
 .player-card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 12px; }
-.player-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
-.tier-badge { font-size: 12px; background: var(--bg); padding: 2px 8px; border-radius: 999px; }
+.player-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; gap: 8px; }
+.player-header strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tier-badge { font-size: 12px; background: var(--input-bg); border: 1px solid var(--border); padding: 2px 8px; border-radius: 999px; flex-shrink: 0; }
 .top-champs img { width: 32px; height: 32px; border-radius: 50%; margin-right: 4px; }
-.player-actions { margin-top: 8px; display: flex; gap: 8px; font-size: 13px; }
+.player-actions { margin-top: 8px; display: flex; gap: 8px; font-size: 13px; align-items: center; }
+.player-actions a { color: var(--color-blue-text); }
 
-.set-form-title { margin: 24px 0 8px; }
+.set-form-title { margin: 24px 0 8px; color: var(--text); }
 .team-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0; }
 .team-block { border: 1px solid var(--border); border-radius: 8px; padding: 12px; background: var(--card-bg); }
 .team-block.blue { border-top: 4px solid var(--color-blue); }
 .team-block.red { border-top: 4px solid var(--color-red); }
-.team-block h4 { margin: 0 0 10px; }
-.small { font-size: 11px; font-weight: normal; }
+.team-block h4 { margin: 0 0 10px; color: var(--text); }
+.small { font-size: 11px; font-weight: normal; color: var(--muted); }
 
 .lane-row { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; padding: 4px; border-radius: 6px; cursor: grab; }
 .lane-row.dragging { opacity: 0.4; }
-.lane-row.drag-over { background: var(--bg); outline: 2px dashed var(--color-blue); }
+.lane-row.drag-over { background: var(--input-bg); outline: 2px dashed var(--color-blue); }
 .drag-handle { color: var(--muted); cursor: grab; user-select: none; }
-.lane-icon { display: inline-flex; color: var(--muted); flex-shrink: 0; }
+.lane-icon { display: inline-flex; flex-shrink: 0; }
+.lane-icon-img { width: 16px; height: 16px; }
 .lane-row .player-select { flex: 1; min-width: 0; }
 
 .champion-slot { display: flex; align-items: center; gap: 6px; padding: 3px 8px 3px 3px; min-width: 120px; }
@@ -63,34 +79,38 @@ button:hover { background: var(--bg); }
 .add-ban-btn { border-radius: 50%; width: 28px; height: 28px; padding: 0; font-size: 16px; line-height: 1; }
 
 .winner-pick { display: flex; gap: 16px; margin: 12px 0; }
+.edit-actions { display: flex; gap: 8px; }
+#cancelEditBtn { color: var(--muted); }
 
 #seriesList { list-style: none; padding: 0; }
 #seriesList li { margin-bottom: 4px; }
 .series-link { width: 100%; text-align: left; }
 
-table { width: 100%; border-collapse: collapse; margin-bottom: 24px; background: var(--card-bg); }
+table { width: 100%; border-collapse: collapse; margin-bottom: 24px; background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
 th, td { border-bottom: 1px solid var(--border); padding: 8px; text-align: left; font-size: 13px; }
+th { color: var(--muted); font-weight: 600; }
+tbody tr:hover { background: var(--input-bg); }
 
 /* ---- 챔피언 피커 모달 ---- */
-.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 100; }
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 100; }
 .modal-overlay.hidden { display: none; }
-.modal.champion-picker { background: var(--card-bg); border-radius: 10px; width: min(560px, 92vw); max-height: 80vh; display: flex; flex-direction: column; overflow: hidden; }
+.modal.champion-picker { background: var(--card-bg); border: 1px solid var(--border-strong); border-radius: 10px; width: min(560px, 92vw); max-height: 80vh; display: flex; flex-direction: column; overflow: hidden; }
 .modal-header { display: flex; gap: 8px; padding: 12px; border-bottom: 1px solid var(--border); }
 .modal-header input { flex: 1; }
-#closeChampionPicker { border: none; background: none; font-size: 18px; padding: 0 6px; }
+#closeChampionPicker { border: none; background: none; color: var(--text); font-size: 18px; padding: 0 6px; }
 .champion-grid { overflow-y: auto; padding: 12px; display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 8px; }
 .champion-grid-item { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 6px; border: 1px solid transparent; background: none; }
 .champion-grid-item img { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; }
-.champion-grid-item span { font-size: 11px; text-align: center; line-height: 1.2; }
-.champion-grid-item:hover:not(:disabled) { border-color: var(--color-blue); background: var(--bg); }
+.champion-grid-item span { font-size: 11px; text-align: center; line-height: 1.2; color: var(--text); }
+.champion-grid-item:hover:not(:disabled) { border-color: var(--color-blue); background: var(--input-bg); }
 .champion-grid-item:disabled { opacity: 0.25; cursor: not-allowed; }
 
-/* ---- 시리즈/게임 카드 (다크 UI) ---- */
-.series-card { background: #12182b; color: #e6e8ef; border: 1px solid #caa24a; border-radius: 10px; padding: 16px; margin: 16px 0; }
+/* ---- 시리즈/게임 카드 ---- */
+.series-card { background: var(--card-bg); color: var(--text); border: 1px solid var(--accent-gold); border-radius: 10px; padding: 16px; margin: 16px 0; }
 .series-card-header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
 .series-badges { display: flex; align-items: center; gap: 8px; }
 .series-meta { display: flex; align-items: center; gap: 10px; }
-.series-date { font-size: 12px; color: #9aa3b8; }
+.series-date { font-size: 12px; color: var(--muted); }
 .series-score { font-size: 20px; font-weight: 700; margin-left: 4px; }
 .series-empty { padding: 8px 0; }
 
@@ -101,34 +121,35 @@ th, td { border-bottom: 1px solid var(--border); padding: 8px; text-align: left;
 .badge-status-in_progress { background: #3a3f55; color: #c9cfe6; }
 .badge-win { background: #1f7a3f; color: #baf4cf; }
 .badge-lose { background: #444a5e; color: #c9cfe6; }
-.delete-series-btn { border: 1px solid #a13a3a; color: #ff8f8f; background: transparent; border-radius: 6px; padding: 4px 10px; }
+.delete-series-btn { border: 1px solid #a13a3a; color: var(--color-red-text); background: transparent; border-radius: 6px; padding: 4px 10px; }
 .delete-series-btn:hover { background: #3a1414; }
+.edit-game-btn { border: 1px solid var(--border-strong); color: var(--muted); background: transparent; border-radius: 6px; padding: 2px 10px; font-size: 12px; }
+.edit-game-btn:hover { background: var(--input-bg); color: var(--text); }
 
-.game-card { background: #0e1424; border: 1px solid #232a42; border-radius: 8px; margin-top: 14px; overflow: hidden; }
-.game-card-header { padding: 6px 12px; font-size: 12px; color: #8891a8; border-bottom: 1px solid #232a42; }
+.game-card { background: var(--card-bg-2); border: 1px solid var(--border); border-radius: 8px; margin-top: 14px; overflow: hidden; }
+.game-card-header { display: flex; justify-content: space-between; align-items: center; padding: 6px 12px; font-size: 12px; color: var(--muted); border-bottom: 1px solid var(--border); }
 .game-teams { display: grid; grid-template-columns: 1fr auto 1fr; }
 .game-vs { display: flex; align-items: center; justify-content: center; padding: 0 10px; color: #6b7392; font-size: 12px; font-weight: 700; }
 .game-team-col { padding: 10px 14px; }
-.game-team-col.red { border-right: 1px solid #232a42; }
+.game-team-col.red { border-right: 1px solid var(--border); }
 .game-team-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
 .game-team-name { font-weight: 700; font-size: 13px; }
-.game-team-col.red .game-team-name { color: #ff8f8f; }
-.game-team-col.blue .game-team-name { color: #8fb4ff; }
-.game-ban-row { display: flex; align-items: center; gap: 4px; margin-bottom: 10px; }
+.game-team-col.red .game-team-name { color: var(--color-red-text); }
+.game-team-col.blue .game-team-name { color: var(--color-blue-text); }
+.game-ban-row { display: flex; align-items: center; gap: 4px; margin-bottom: 10px; flex-wrap: wrap; }
 .ban-row-label { font-size: 11px; color: #6b7392; margin-right: 4px; }
 .ban-icon { width: 20px; height: 20px; border-radius: 50%; object-fit: cover; opacity: 0.85; }
 .game-player-row { display: flex; align-items: center; gap: 8px; padding: 5px 6px; border-radius: 6px; }
-.game-team-col.red .game-player-row { background: rgba(214, 69, 69, 0.08); }
-.game-team-col.blue .game-player-row { background: rgba(47, 111, 235, 0.1); }
+.game-team-col.red .game-player-row { background: rgba(224, 90, 90, 0.08); }
+.game-team-col.blue .game-player-row { background: rgba(77, 130, 243, 0.1); }
 .game-player-row + .game-player-row { margin-top: 2px; }
-.game-player-row .lane-icon { color: #6b7392; }
 .game-champ-avatar { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; }
 .game-player-info { line-height: 1.3; min-width: 0; }
-.game-player-name { font-size: 12.5px; font-weight: 600; color: #e6e8ef; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.game-champ-name { font-size: 11px; color: #8891a8; }
+.game-player-name { font-size: 12.5px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.game-champ-name { font-size: 11px; color: var(--muted); }
 
 @media (max-width: 640px) {
   .game-teams { grid-template-columns: 1fr; }
   .game-vs { padding: 4px 0; }
-  .game-team-col.red { border-right: none; border-bottom: 1px solid #232a42; }
+  .game-team-col.red { border-right: none; border-bottom: 1px solid var(--border); }
 }

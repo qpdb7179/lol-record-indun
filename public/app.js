@@ -4,6 +4,7 @@ const state = {
   championById: new Map(),
   activeSeries: null,
   usedFromPreviousSets: new Set(),
+  editingSetId: null,
 };
 
 async function api(path, opts) {
@@ -44,15 +45,16 @@ function playerDisplay(p) {
 
 const LANES = ['top', 'jungle', 'mid', 'adc', 'support'];
 const LANE_LABEL = { top: '탑', jungle: '정글', mid: '미드', adc: '원딜', support: '서폿' };
-const LANE_ICONS = {
-  top: '<svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M12 2l9 4v6c0 5-3.8 9-9 10-5.2-1-9-5-9-10V6l9-4z"/></svg>',
-  jungle: '<svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M12 2c3 3 5 6 5 9a5 5 0 01-10 0c0-3 2-6 5-9z"/></svg>',
-  mid: '<svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M12 2l2.5 7.5H22l-6 4.5 2.5 7.5L12 17l-6.5 4.5L8 14 2 9.5h7.5z"/></svg>',
-  adc: '<svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M3 21l9-3-6-6-3 9zm7.5-10.5L18 3l3 3-7.5 7.5-3-3z"/></svg>',
-  support: '<svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M12 21s-7-4.5-9.5-9C.5 8 2 4 6 4c2 0 4 1.5 6 4 2-2.5 4-4 6-4 4 0 5.5 4 3.5 8-2.5 4.5-9.5 9-9.5 9z"/></svg>',
+// 라이엇 게임 클라이언트의 실제 포지션 아이콘(Data Dragon엔 없어서 Community Dragon 미러로 로드)
+const LANE_ICON_URL = {
+  top: 'https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-static-assets/global/default/svg/position-top.svg',
+  jungle: 'https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-static-assets/global/default/svg/position-jungle.svg',
+  mid: 'https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-static-assets/global/default/svg/position-middle.svg',
+  adc: 'https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-static-assets/global/default/svg/position-bottom.svg',
+  support: 'https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-static-assets/global/default/svg/position-utility.svg',
 };
-function laneIconSvg(lane) {
-  return LANE_ICONS[lane] || '';
+function laneIconImg(lane) {
+  return `<img class="lane-icon-img" src="${LANE_ICON_URL[lane] || ''}" alt="${LANE_LABEL[lane] || lane}" title="${LANE_LABEL[lane] || lane}">`;
 }
 
 // ---- 참가자 관리 ----
@@ -138,6 +140,40 @@ async function renderActiveSeries() {
   const el = document.getElementById('activeSeries');
   if (!s) { el.innerHTML = ''; return; }
 
+  const editingSet = state.editingSetId ? s.sets.find((set) => set.id === state.editingSetId) : null;
+  if (state.editingSetId && !editingSet) state.editingSetId = null;
+
+  if (editingSet) {
+    state.usedFromPreviousSets = new Set(await api(`/api/series/${s.id}/used-champions?beforeSet=${editingSet.setNumber}`));
+    el.innerHTML = `
+      ${renderSeriesCard(s)}
+      <form id="setForm">
+        <h4 class="set-form-title">Game ${editingSet.setNumber} 수정</h4>
+        <div class="team-columns">
+          ${renderTeamInputs('blue', editingSet.blueTeam, laneMapFromParticipants(editingSet.blueTeam), { includeChampionDefaults: true, banDefaults: editingSet.bans.blue, lockedLabel: '(선수 구성 고정)' })}
+          ${renderTeamInputs('red', editingSet.redTeam, laneMapFromParticipants(editingSet.redTeam), { includeChampionDefaults: true, banDefaults: editingSet.bans.red, lockedLabel: '(선수 구성 고정)' })}
+        </div>
+        <div class="winner-pick">
+          <label><input type="radio" name="winner" value="blue" ${editingSet.winnerRoster === editingSet.blueRoster ? 'checked' : ''}> 블루 승리</label>
+          <label><input type="radio" name="winner" value="red" ${editingSet.winnerRoster === editingSet.redRoster ? 'checked' : ''}> 레드 승리</label>
+        </div>
+        <p class="error" id="setFormError"></p>
+        <div class="edit-actions">
+          <button type="submit">수정 저장</button>
+          <button type="button" id="cancelEditBtn">취소</button>
+        </div>
+      </form>
+    `;
+    document.getElementById('setForm').addEventListener('submit', (e) => submitSet(e, editingSet.id));
+    document.getElementById('cancelEditBtn').addEventListener('click', async () => {
+      state.editingSetId = null;
+      await renderActiveSeries();
+    });
+    attachDragHandlers(el);
+    updatePlayerSelectOptions();
+    return;
+  }
+
   if (s.status === 'completed') {
     el.innerHTML = renderSeriesCard(s);
     return;
@@ -181,34 +217,47 @@ async function renderActiveSeries() {
   updatePlayerSelectOptions();
 }
 
-function renderTeamInputs(side, allowedPlayers, laneDefaults) {
-  // state.players 항목은 id, 로스터(series.rosters.A/B) 항목은 playerId 필드를 씀 — 여기서 id로 통일
+function laneMapFromParticipants(team) {
+  return new Map(team.map((p) => [p.lane, p]));
+}
+
+function renderTeamInputs(side, allowedPlayers, laneDefaults, options = {}) {
+  const { includeChampionDefaults = false, banDefaults = [], lockedLabel = '(로스터 고정, 라인은 드래그로 변경 가능)' } = options;
+  // state.players 항목은 id, 로스터/세트 참가자 항목은 playerId 필드를 씀 — 여기서 id로 통일
   const pool = (allowedPlayers || state.players).map((p) => ({ id: p.id ?? p.playerId, riotId: p.riotId, displayName: p.displayName }));
   const playerOptionsHtml = (selectedId) => pool.map((p) =>
     `<option value="${p.id}" ${String(p.id) === String(selectedId) ? 'selected' : ''}>${playerDisplay(p)}</option>`).join('');
 
   const rows = LANES.map((lane) => {
-    const defaultPlayerId = laneDefaults ? (laneDefaults.get(lane) ? laneDefaults.get(lane).playerId : '') : '';
+    const entry = laneDefaults ? laneDefaults.get(lane) : null;
+    const defaultPlayerId = entry ? entry.playerId : '';
+    const defaultChampionId = includeChampionDefaults && entry ? entry.championId : null;
     return `
       <div class="lane-row" draggable="true" data-lane="${lane}">
         <span class="drag-handle" title="드래그해서 라인 교체">⠿</span>
-        <span class="lane-icon">${laneIconSvg(lane)}</span>
+        <span class="lane-icon">${laneIconImg(lane)}</span>
         <select class="player-select">
           <option value="">선수 선택</option>${playerOptionsHtml(defaultPlayerId)}
         </select>
-        <button type="button" class="champion-slot" data-champion-id="">
-          <span class="champion-slot-empty">챔피언 선택</span>
+        <button type="button" class="champion-slot" data-champion-id="${defaultChampionId || ''}">
+          ${championSlotInnerHtml(defaultChampionId)}
         </button>
       </div>`;
   }).join('');
 
+  const banSlotsHtml = banDefaults.map((cid) => `
+    <span class="ban-slot-wrap">
+      <button type="button" class="champion-slot ban-slot" data-champion-id="${cid}">${championSlotInnerHtml(cid, true)}</button>
+      <button type="button" class="remove-ban" title="제거">×</button>
+    </span>`).join('');
+
   return `
     <div class="team-block ${side}">
-      <h4>${side === 'blue' ? '블루팀' : '레드팀'}${allowedPlayers ? ' <span class="muted small">(로스터 고정, 라인은 드래그로 변경 가능)</span>' : ''}</h4>
+      <h4>${side === 'blue' ? '블루팀' : '레드팀'}${allowedPlayers ? ` <span class="muted small">${lockedLabel}</span>` : ''}</h4>
       ${rows}
       <div class="ban-section">
         <span class="ban-label">밴</span>
-        <span class="ban-slots"></span>
+        <span class="ban-slots">${banSlotsHtml}</span>
         <button type="button" class="add-ban-btn" title="밴 추가">+</button>
       </div>
     </div>`;
@@ -272,16 +321,14 @@ function computeDisabledChampionIds(excludeButton) {
   return used;
 }
 
+function championSlotInnerHtml(championId, isBan) {
+  if (!championId) return `<span class="champion-slot-empty">${isBan ? '+' : '챔피언 선택'}</span>`;
+  const c = state.championById.get(Number(championId));
+  return `<img src="${c.imageUrl}" class="champion-slot-img" alt="${c.name}"><span>${c.name}</span>`;
+}
 function setChampionSlot(btn, championId) {
-  if (championId) {
-    const c = state.championById.get(championId);
-    btn.dataset.championId = String(championId);
-    btn.innerHTML = `<img src="${c.imageUrl}" class="champion-slot-img" alt="${c.name}"><span>${c.name}</span>`;
-  } else {
-    btn.dataset.championId = '';
-    const isBan = btn.classList.contains('ban-slot');
-    btn.innerHTML = `<span class="champion-slot-empty">${isBan ? '+' : '챔피언 선택'}</span>`;
-  }
+  btn.dataset.championId = championId ? String(championId) : '';
+  btn.innerHTML = championSlotInnerHtml(championId, btn.classList.contains('ban-slot'));
 }
 
 function openChampionPicker(btn) {
@@ -356,6 +403,12 @@ document.getElementById('activeSeries').addEventListener('click', async (e) => {
     state.activeSeries = null;
     document.getElementById('activeSeries').innerHTML = '';
     await loadSeriesList();
+    return;
+  }
+  const editBtn = e.target.closest('.edit-game-btn');
+  if (editBtn) {
+    state.editingSetId = Number(editBtn.dataset.setId);
+    await renderActiveSeries();
   }
 });
 
@@ -387,7 +440,7 @@ function collectBans(side) {
   return [...block.querySelectorAll('.ban-slot')].map((el) => Number(el.dataset.championId)).filter(Boolean);
 }
 
-async function submitSet(e) {
+async function submitSet(e, editingSetId) {
   e.preventDefault();
   const errEl = document.getElementById('setFormError');
   errEl.textContent = '';
@@ -398,8 +451,13 @@ async function submitSet(e) {
     bans: { blue: collectBans('blue'), red: collectBans('red') },
     winner,
   };
+  const url = editingSetId
+    ? `/api/series/${state.activeSeries.id}/sets/${editingSetId}`
+    : `/api/series/${state.activeSeries.id}/sets`;
+  const method = editingSetId ? 'PUT' : 'POST';
   try {
-    state.activeSeries = await api(`/api/series/${state.activeSeries.id}/sets`, { method: 'POST', body: JSON.stringify(payload) });
+    state.activeSeries = await api(url, { method, body: JSON.stringify(payload) });
+    state.editingSetId = null;
     await renderActiveSeries();
     await loadSeriesList();
   } catch (err) {
@@ -426,16 +484,19 @@ function renderSeriesCard(s) {
           <button type="button" class="delete-series-btn" data-id="${s.id}">삭제</button>
         </div>
       </div>
-      ${s.sets.map((set) => renderGameCard(set)).join('') || '<p class="muted series-empty">아직 기록된 세트가 없습니다.</p>'}
+      ${s.sets.map((set, i) => renderGameCard(set, i === s.sets.length - 1)).join('') || '<p class="muted series-empty">아직 기록된 세트가 없습니다.</p>'}
     </div>
   `;
 }
 
-function renderGameCard(set) {
+function renderGameCard(set, isLast) {
   const redWon = set.winnerRoster === set.redRoster;
   return `
     <div class="game-card">
-      <div class="game-card-header"><span>Game ${set.setNumber}</span></div>
+      <div class="game-card-header">
+        <span>Game ${set.setNumber}</span>
+        ${isLast ? `<button type="button" class="edit-game-btn" data-set-id="${set.id}">수정</button>` : ''}
+      </div>
       <div class="game-teams">
         ${renderGameTeamColumn('red', set.redTeam, set.bans.red, redWon)}
         <div class="game-vs">VS</div>
@@ -461,7 +522,7 @@ function renderGameTeamColumn(side, team, bans, won) {
       <div class="game-player-rows">
         ${sortedTeam.map((p) => `
           <div class="game-player-row">
-            <span class="lane-icon">${laneIconSvg(p.lane)}</span>
+            <span class="lane-icon">${laneIconImg(p.lane)}</span>
             <img class="game-champ-avatar" src="${championImg(p.championId)}" alt="${championLabel(p.championId)}">
             <div class="game-player-info">
               <div class="game-player-name">${p.riotId}${p.displayName ? ` (${p.displayName})` : ''}</div>

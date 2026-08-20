@@ -121,18 +121,84 @@ router.post('/:id/sets', (req, res) => {
     (bans.blue || []).forEach((cid, i) => insertBan.run(setId, 'blue', cid, i + 1));
     (bans.red || []).forEach((cid, i) => insertBan.run(setId, 'red', cid, i + 1));
 
-    const wins = db.prepare('SELECT winner_roster, COUNT(*) as cnt FROM sets WHERE series_id = ? GROUP BY winner_roster').all(series.id);
-    const winsMap = Object.fromEntries(wins.map((w) => [w.winner_roster, w.cnt]));
-    const needed = SETS_TO_WIN[series.format];
-    const doneRoster = ['A', 'B'].find((r) => (winsMap[r] || 0) >= needed);
-    if (doneRoster) {
-      db.prepare('UPDATE series SET status = ?, winner_roster = ? WHERE id = ?').run('completed', doneRoster, series.id);
-    }
+    recomputeSeriesStatus(series.id, series.format);
   });
 
   runInTransaction();
   res.status(201).json(serializeSeriesDetail(db.prepare('SELECT * FROM series WHERE id = ?').get(series.id)));
 });
+
+// 시리즈의 가장 최근 세트만 수정 가능 — 선수 구성(로스터/진영)은 고정, 라인/챔피언/밴/승자만 변경 가능.
+// 중간 세트를 고치면 피어리스 사용 챔피언 목록과 로스터 정체성까지 연쇄적으로 재계산해야 해서 범위를 의도적으로 제한함.
+router.put('/:id/sets/:setId', (req, res) => {
+  const series = db.prepare('SELECT * FROM series WHERE id = ?').get(req.params.id);
+  if (!series) return res.status(404).json({ error: '시리즈를 찾을 수 없습니다' });
+
+  const lastSet = db.prepare('SELECT * FROM sets WHERE series_id = ? ORDER BY set_number DESC LIMIT 1').get(series.id);
+  if (!lastSet || String(lastSet.id) !== req.params.setId) {
+    return res.status(400).json({ error: '가장 최근 세트만 수정할 수 있습니다' });
+  }
+
+  const { blueTeam, redTeam, bans = {}, winner } = req.body;
+  const validationError = validateSetPayload(blueTeam, redTeam, bans, winner);
+  if (validationError) return res.status(400).json({ error: validationError });
+
+  const existingParticipants = db.prepare('SELECT player_id, team FROM set_participants WHERE set_id = ?').all(lastSet.id);
+  const existingBlueIds = new Set(existingParticipants.filter((p) => p.team === 'blue').map((p) => p.player_id));
+  const existingRedIds = new Set(existingParticipants.filter((p) => p.team === 'red').map((p) => p.player_id));
+  if (!sameMembers(blueTeam.map((p) => p.playerId), existingBlueIds) || !sameMembers(redTeam.map((p) => p.playerId), existingRedIds)) {
+    return res.status(400).json({ error: '세트 수정 시 선수 구성(팀)은 바꿀 수 없습니다. 라인/챔피언/밴/승자만 수정 가능합니다.' });
+  }
+
+  const used = getUsedChampionIds(series.id, lastSet.set_number);
+  const allChampionIds = [
+    ...blueTeam.map((p) => p.championId),
+    ...redTeam.map((p) => p.championId),
+    ...(bans.blue || []),
+    ...(bans.red || []),
+  ];
+  const conflict = allChampionIds.find((cid) => used.has(cid));
+  if (conflict) {
+    return res.status(400).json({
+      error: `챔피언 ID ${conflict}는 이 시리즈의 이전 세트에서 이미 사용되어 다시 사용할 수 없습니다 (피어리스 드래프트 규칙).`,
+    });
+  }
+
+  const winnerRoster = winner === 'blue' ? lastSet.blue_roster : lastSet.red_roster;
+
+  const runInTransaction = db.transaction(() => {
+    db.prepare('DELETE FROM set_participants WHERE set_id = ?').run(lastSet.id);
+    db.prepare('DELETE FROM set_bans WHERE set_id = ?').run(lastSet.id);
+    db.prepare('UPDATE sets SET winner_roster = ? WHERE id = ?').run(winnerRoster, lastSet.id);
+
+    const insertParticipant = db.prepare(
+      'INSERT INTO set_participants (set_id, player_id, team, lane, champion_id) VALUES (?, ?, ?, ?, ?)'
+    );
+    blueTeam.forEach((p) => insertParticipant.run(lastSet.id, p.playerId, 'blue', p.lane, p.championId));
+    redTeam.forEach((p) => insertParticipant.run(lastSet.id, p.playerId, 'red', p.lane, p.championId));
+
+    const insertBan = db.prepare('INSERT INTO set_bans (set_id, team, champion_id, ban_order) VALUES (?, ?, ?, ?)');
+    (bans.blue || []).forEach((cid, i) => insertBan.run(lastSet.id, 'blue', cid, i + 1));
+    (bans.red || []).forEach((cid, i) => insertBan.run(lastSet.id, 'red', cid, i + 1));
+
+    recomputeSeriesStatus(series.id, series.format);
+  });
+
+  runInTransaction();
+  res.json(serializeSeriesDetail(db.prepare('SELECT * FROM series WHERE id = ?').get(series.id)));
+});
+
+function recomputeSeriesStatus(seriesId, format) {
+  const wins = db.prepare('SELECT winner_roster, COUNT(*) as cnt FROM sets WHERE series_id = ? GROUP BY winner_roster').all(seriesId);
+  const winsMap = Object.fromEntries(wins.map((w) => [w.winner_roster, w.cnt]));
+  const needed = SETS_TO_WIN[format];
+  const doneRoster = ['A', 'B'].find((r) => (winsMap[r] || 0) >= needed);
+  if (doneRoster) {
+    db.prepare('UPDATE series SET status = ?, winner_roster = ? WHERE id = ?').run('completed', doneRoster, seriesId);
+  } else {
+    db.prepare('UPDATE series SET status = ?, winner_roster = NULL WHERE id = ?').run('in_progress', seriesId);
+  }
+}
 
 function sameMembers(arr, set) {
   return arr.length === set.size && arr.every((x) => set.has(x));
