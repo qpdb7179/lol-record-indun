@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>내전 전적 기록</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header>
+  <h1>내전 전적 기록</h1>
+  <nav>
+    <button class="tab-btn active" data-tab="players">참가자 관리</button>
+    <button class="tab-btn" data-tab="record">전적 기록</button>
+    <button class="tab-btn" data-tab="stats">통계</button>
+  </nav>
+</header>
+
+<main>
+  <section id="tab-players" class="tab-panel active">
+    <form id="playerForm">
+      <input id="gameNameInput" placeholder="게임 이름" required>
+      <span>#</span>
+      <input id="tagLineInput" placeholder="태그 (예: KR1)" required>
+      <button type="submit">등록</button>
+    </form>
+    <p class="error" id="playerFormError"></p>
+    <div id="playerList"></div>
+  </section>
+
+  <section id="tab-record" class="tab-panel">
+    <form id="seriesForm">
+      <input type="date" id="matchDateInput" required>
+      <select id="formatInput">
+        <option value="bo3">Bo3</option>
+        <option value="bo5">Bo5</option>
+      </select>
+      <button type="submit">새 시리즈 시작</button>
+    </form>
+    <div id="activeSeries"></div>
+    <h3>시리즈 목록</h3>
+    <ul id="seriesList"></ul>
+  </section>
+
+  <section id="tab-stats" class="tab-panel">
+    <h3>챔피언 통계</h3>
+    <div id="championStats"></div>
+    <h3>플레이어 통계</h3>
+    <div id="playerStats"></div>
+  </section>
+</main>
+
+<script src="/app.js"></script>
+</body>
+</html>

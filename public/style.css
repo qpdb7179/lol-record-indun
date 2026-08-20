@@ -1,0 +1,56 @@
+:root {
+  --color-blue: #2f6feb;
+  --color-red: #d64545;
+  --bg: #f7f8fa;
+  --card-bg: #fff;
+  --border: #e1e4e8;
+  --text: #1f2328;
+  --muted: #6a737d;
+}
+* { box-sizing: border-box; }
+body { margin: 0; font-family: -apple-system, "Malgun Gothic", sans-serif; background: var(--bg); color: var(--text); }
+header { background: var(--card-bg); border-bottom: 1px solid var(--border); padding: 16px 24px; display: flex; align-items: center; gap: 24px; }
+header h1 { font-size: 18px; margin: 0; }
+nav { display: flex; gap: 8px; }
+.tab-btn { padding: 8px 16px; border: 1px solid var(--border); background: var(--card-bg); border-radius: 6px; cursor: pointer; }
+.tab-btn.active { background: var(--color-blue); color: #fff; border-color: var(--color-blue); }
+main { max-width: 960px; margin: 24px auto; padding: 0 16px 48px; }
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+.muted { color: var(--muted); }
+.error { color: var(--color-red); min-height: 1.2em; }
+
+#playerForm, #seriesForm { display: flex; gap: 8px; align-items: center; margin-bottom: 16px; }
+input, select, button { font-size: 14px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; }
+button { cursor: pointer; background: var(--card-bg); }
+button:hover { background: var(--bg); }
+
+#playerList { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+.player-card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 12px; }
+.player-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.tier-badge { font-size: 12px; background: var(--bg); padding: 2px 8px; border-radius: 999px; }
+.top-champs img { width: 32px; height: 32px; border-radius: 50%; margin-right: 4px; }
+.player-actions { margin-top: 8px; display: flex; gap: 8px; font-size: 13px; }
+
+.team-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0; }
+.team-block { border: 1px solid var(--border); border-radius: 8px; padding: 12px; background: var(--card-bg); }
+.team-block.blue { border-top: 4px solid var(--color-blue); }
+.team-block.red { border-top: 4px solid var(--color-red); }
+.lane-row { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; }
+.lane-label { width: 36px; font-size: 13px; color: var(--muted); }
+.ban-section { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.ban-list { list-style: none; padding: 0; margin: 8px 0 0; display: flex; gap: 6px; flex-wrap: wrap; width: 100%; }
+.ban-list li { background: var(--bg); border-radius: 999px; padding: 2px 8px; font-size: 12px; }
+.ban-list button { border: none; background: none; cursor: pointer; padding: 0 0 0 4px; }
+
+.winner-pick { display: flex; gap: 16px; margin: 12px 0; }
+.set-history { margin: 16px 0; }
+.set-summary { border-bottom: 1px solid var(--border); padding: 8px 0; font-size: 13px; }
+.set-detail { color: var(--muted); margin-top: 4px; }
+
+#seriesList { list-style: none; padding: 0; }
+#seriesList li { margin-bottom: 4px; }
+.series-link { width: 100%; text-align: left; }
+
+table { width: 100%; border-collapse: collapse; margin-bottom: 24px; background: var(--card-bg); }
+th, td { border-bottom: 1px solid var(--border); padding: 8px; text-align: left; font-size: 13px; }
