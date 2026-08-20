@@ -28,7 +28,15 @@ main { max-width: 1000px; margin: 24px auto; padding: 0 16px 48px; }
 
 h3 { color: var(--text); }
 
-#playerForm, #seriesForm { display: flex; gap: 8px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
+#playerForm { display: flex; gap: 8px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
+
+.new-series-card { background: var(--card-bg); border: 1px solid var(--accent-gold); border-radius: 10px; padding: 16px; margin-bottom: 20px; }
+.new-series-title { margin: 0 0 12px; font-size: 15px; }
+#seriesForm { display: flex; gap: 16px; align-items: flex-end; flex-wrap: wrap; }
+.field-group { display: flex; flex-direction: column; gap: 4px; }
+.field-group label { font-size: 12px; color: var(--muted); }
+.primary-btn { background: var(--color-blue); color: #fff; border-color: var(--color-blue); font-weight: 600; padding: 8px 22px; }
+.primary-btn:hover { background: #3f6fd1; }
 input, select, button {
   font-size: 14px; padding: 6px 10px; border: 1px solid var(--border-strong); border-radius: 6px;
   background: var(--input-bg); color: var(--text);
@@ -122,6 +130,14 @@ tbody tr:hover { background: var(--input-bg); }
 
 .ranked-card, .mastery-card, .recent-stats-card { background: var(--card-bg-2); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; flex-shrink: 0; }
 .ranked-card-header { padding: 8px 12px; font-size: 12px; font-weight: 600; color: var(--muted); border-bottom: 1px solid var(--border); }
+.ranked-card-toggle {
+  display: flex; justify-content: space-between; align-items: center; width: 100%;
+  background: none; border: none; border-radius: 0; border-bottom: 1px solid var(--border);
+  font-family: inherit; cursor: pointer;
+}
+.ranked-card-toggle:hover { background: var(--border); }
+.ranked-toggle-hint { color: var(--muted); font-weight: normal; font-size: 11px; }
+.ranked-queue-detail { padding: 10px 12px; border-top: 1px solid var(--border); }
 .ranked-card-body { display: flex; align-items: center; gap: 10px; padding: 12px; }
 .ranked-card-body.ranked-unranked { color: var(--muted); font-size: 13px; }
 .ranked-emblem { width: 44px; height: 44px; flex-shrink: 0; }

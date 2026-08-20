@@ -1,9 +1,15 @@
 const express = require('express');
 const db = require('../db');
-const { fetchPlayerProfile, fetchRecentChampionStats, RECENT_GAMES_COUNT } = require('../lib/riot');
+const { fetchPlayerProfile, fetchRecentChampionStats, RECENT_GAMES_COUNT, RANKED_QUEUE_ID } = require('../lib/riot');
 
 const router = express.Router();
 const RECENT_STATS_CACHE_MS = 60 * 60 * 1000; // 1시간 — match-v5 호출량이 커서(프로필당 1+N건) 매번 새로 안 불러옴
+
+// ?queue=solo|flex 쿼리 파라미터를 어느 캐시 컬럼/큐ID로 매핑할지 — 고정된 화이트리스트라 SQL 컬럼명 보간에 써도 안전함
+const QUEUE_CACHE_COLUMNS = {
+  solo: { json: 'solo_queue_stats_json', fetchedAt: 'solo_queue_stats_fetched_at' },
+  flex: { json: 'flex_queue_stats_json', fetchedAt: 'flex_queue_stats_fetched_at' },
+};
 
 router.get('/', (req, res) => {
   const players = db.prepare('SELECT * FROM players ORDER BY riot_game_name COLLATE NOCASE').all();
@@ -88,23 +94,30 @@ router.post('/:id/refresh', async (req, res) => {
 });
 
 // 최근 N경기(match-v5) 챔피언별 전적 — 호출량이 커서 온디맨드(버튼 클릭)로만 조회, 결과는 캐싱.
+// ?queue=solo|flex 를 주면 그 큐로만 필터링해서 별도 캐시에 저장(참가자 상세 모달의 랭크 카드에서 사용).
 router.post('/:id/recent-stats', async (req, res) => {
   const player = db.prepare('SELECT * FROM players WHERE id = ?').get(req.params.id);
   if (!player) return res.status(404).json({ error: '참가자를 찾을 수 없습니다' });
   if (!player.puuid) return res.status(400).json({ error: 'PUUID 정보가 없습니다. 먼저 새로고침해주세요.' });
 
+  const queueKey = req.query.queue;
+  const cols = QUEUE_CACHE_COLUMNS[queueKey] || { json: 'recent_stats_json', fetchedAt: 'recent_stats_fetched_at' };
+  const queueId = RANKED_QUEUE_ID[queueKey] || null;
+
   const forceRefresh = req.query.force === '1';
-  const cachedAt = player.recent_stats_fetched_at ? new Date(player.recent_stats_fetched_at).getTime() : 0;
-  const isFresh = player.recent_stats_json && Date.now() - cachedAt < RECENT_STATS_CACHE_MS;
+  const cachedJson = player[cols.json];
+  const cachedFetchedAt = player[cols.fetchedAt];
+  const cachedAt = cachedFetchedAt ? new Date(cachedFetchedAt).getTime() : 0;
+  const isFresh = cachedJson && Date.now() - cachedAt < RECENT_STATS_CACHE_MS;
 
   if (!forceRefresh && isFresh) {
-    return res.json({ stats: JSON.parse(player.recent_stats_json), fetchedAt: player.recent_stats_fetched_at, fromCache: true });
+    return res.json({ stats: JSON.parse(cachedJson), fetchedAt: cachedFetchedAt, fromCache: true });
   }
 
   try {
-    const stats = await fetchRecentChampionStats(player.puuid, RECENT_GAMES_COUNT);
+    const stats = await fetchRecentChampionStats(player.puuid, RECENT_GAMES_COUNT, queueId);
     const now = new Date().toISOString();
-    db.prepare('UPDATE players SET recent_stats_json = ?, recent_stats_fetched_at = ? WHERE id = ?')
+    db.prepare(`UPDATE players SET ${cols.json} = ?, ${cols.fetchedAt} = ? WHERE id = ?`)
       .run(JSON.stringify(stats), now, player.id);
     res.json({ stats, fetchedAt: now, fromCache: false });
   } catch (err) {
@@ -137,6 +150,10 @@ function serialize(p) {
     topChampions: p.top_champions_json ? JSON.parse(p.top_champions_json) : [],
     recentStats: p.recent_stats_json ? JSON.parse(p.recent_stats_json) : null,
     recentStatsFetchedAt: p.recent_stats_fetched_at,
+    soloQueueStats: p.solo_queue_stats_json ? JSON.parse(p.solo_queue_stats_json) : null,
+    soloQueueStatsFetchedAt: p.solo_queue_stats_fetched_at,
+    flexQueueStats: p.flex_queue_stats_json ? JSON.parse(p.flex_queue_stats_json) : null,
+    flexQueueStatsFetchedAt: p.flex_queue_stats_fetched_at,
     opggUrl: `https://op.gg/lol/summoners/kr/${encodeURIComponent(p.riot_game_name)}-${encodeURIComponent(p.riot_tag_line)}`,
     lastSyncedAt: p.last_synced_at,
   };

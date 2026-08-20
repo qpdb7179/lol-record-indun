@@ -9,6 +9,8 @@ const state = {
   expandedSeriesId: null,
   expandedSeriesData: null,
   expandedMatchId: null,
+  soloQueueOpen: false,
+  flexQueueOpen: false,
 };
 
 async function api(path, opts) {
@@ -94,7 +96,15 @@ function renderPlayers() {
   `).join('') || '<p class="muted">등록된 참가자가 없습니다.</p>';
 }
 
-function renderRankedQueueCard(label, tier, rank, lp, wins, losses) {
+function renderQueueChampionStats(stats, fetchedAt) {
+  if (!stats) return '<p class="muted">불러오는 중...</p>';
+  if (!stats.perChampion.length) return '<p class="muted">최근 기록이 없습니다.</p>';
+  return `
+    <p class="recent-stats-summary">${stats.totalGames}전 ${stats.totalWins}승 ${stats.totalLosses}패 · ${formatRelativeTime(fetchedAt)} 기준</p>
+    ${renderChampionAggregateTable(stats.perChampion)}`;
+}
+
+function renderRankedQueueCard(label, tier, rank, lp, wins, losses, queueKey, playerId, cachedStats, cachedFetchedAt, isOpen) {
   if (!tier) {
     return `
       <div class="ranked-card">
@@ -106,7 +116,10 @@ function renderRankedQueueCard(label, tier, rank, lp, wins, losses) {
   const winRate = total ? Math.round((wins / total) * 100) : 0;
   return `
     <div class="ranked-card">
-      <div class="ranked-card-header">${label}</div>
+      <button type="button" class="ranked-card-header ranked-card-toggle" data-queue="${queueKey}" data-id="${playerId}">
+        <span>${label}</span>
+        <span class="ranked-toggle-hint">챔피언별 성적 ${isOpen ? '▲' : '▾'}</span>
+      </button>
       <div class="ranked-card-body">
         <img class="ranked-emblem" src="${tierIconUrl(tier)}" alt="${tier}">
         <div class="ranked-card-info">
@@ -118,6 +131,7 @@ function renderRankedQueueCard(label, tier, rank, lp, wins, losses) {
           <div class="ranked-winrate">승률 ${winRate}%</div>
         </div>
       </div>
+      ${isOpen ? `<div class="ranked-queue-detail" id="${queueKey}QueueDetail">${renderQueueChampionStats(cachedStats, cachedFetchedAt)}</div>` : ''}
     </div>`;
 }
 
@@ -217,8 +231,8 @@ function renderRecentStatsBody(stats, fetchedAt, myRiotId) {
 
 function renderPlayerDetailBody(p) {
   return `
-    ${renderRankedQueueCard('솔로랭크', p.tier, p.rank, p.leaguePoints, p.wins, p.losses)}
-    ${renderRankedQueueCard('자유랭크', p.flexTier, p.flexRank, p.flexLeaguePoints, p.flexWins, p.flexLosses)}
+    ${renderRankedQueueCard('솔로랭크', p.tier, p.rank, p.leaguePoints, p.wins, p.losses, 'solo', p.id, p.soloQueueStats, p.soloQueueStatsFetchedAt, state.soloQueueOpen)}
+    ${renderRankedQueueCard('자유랭크', p.flexTier, p.flexRank, p.flexLeaguePoints, p.flexWins, p.flexLosses, 'flex', p.id, p.flexQueueStats, p.flexQueueStatsFetchedAt, state.flexQueueOpen)}
     <div class="mastery-card">
       <div class="ranked-card-header">숙련도 Top 3</div>
       <div class="mastery-list">
@@ -245,6 +259,8 @@ function renderPlayerDetailBody(p) {
 
 function openPlayerDetail(player) {
   state.expandedMatchId = null;
+  state.soloQueueOpen = false;
+  state.flexQueueOpen = false;
   document.getElementById('playerDetailTitle').textContent = playerDisplay(player);
   document.getElementById('playerDetailBody').innerHTML = renderPlayerDetailBody(player);
   document.getElementById('playerDetailModal').classList.remove('hidden');
@@ -254,6 +270,33 @@ function closePlayerDetail() {
 }
 document.getElementById('closePlayerDetail').addEventListener('click', closePlayerDetail);
 document.getElementById('playerDetailBody').addEventListener('click', async (e) => {
+  const queueToggle = e.target.closest('.ranked-card-toggle');
+  if (queueToggle) {
+    const queueKey = queueToggle.dataset.queue;
+    const playerId = queueToggle.dataset.id;
+    const openStateKey = queueKey === 'solo' ? 'soloQueueOpen' : 'flexQueueOpen';
+    const statsKey = queueKey === 'solo' ? 'soloQueueStats' : 'flexQueueStats';
+    const fetchedAtKey = queueKey === 'solo' ? 'soloQueueStatsFetchedAt' : 'flexQueueStatsFetchedAt';
+    const player = state.players.find((p) => String(p.id) === playerId);
+    if (!player) return;
+
+    state[openStateKey] = !state[openStateKey];
+    document.getElementById('playerDetailBody').innerHTML = renderPlayerDetailBody(player);
+
+    if (state[openStateKey] && !player[statsKey]) {
+      try {
+        const result = await api(`/api/players/${playerId}/recent-stats?queue=${queueKey}`, { method: 'POST' });
+        player[statsKey] = result.stats;
+        player[fetchedAtKey] = result.fetchedAt;
+        document.getElementById('playerDetailBody').innerHTML = renderPlayerDetailBody(player);
+      } catch (err) {
+        const detailEl = document.getElementById(`${queueKey}QueueDetail`);
+        if (detailEl) detailEl.innerHTML = `<p class="error">${err.message}</p>`;
+      }
+    }
+    return;
+  }
+
   const matchRow = e.target.closest('.match-row');
   if (matchRow) {
     const matchId = matchRow.dataset.matchId;

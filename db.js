@@ -91,6 +91,10 @@ const newPlayerColumns = {
   flex_losses: 'INTEGER',
   recent_stats_json: 'TEXT',
   recent_stats_fetched_at: 'TEXT',
+  solo_queue_stats_json: 'TEXT',
+  solo_queue_stats_fetched_at: 'TEXT',
+  flex_queue_stats_json: 'TEXT',
+  flex_queue_stats_fetched_at: 'TEXT',
 };
 for (const [name, type] of Object.entries(newPlayerColumns)) {
   if (!playerColumns.includes(name)) {

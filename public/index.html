@@ -30,14 +30,23 @@
   </section>
 
   <section id="tab-record" class="tab-panel">
-    <form id="seriesForm">
-      <input type="date" id="matchDateInput" required>
-      <select id="formatInput">
-        <option value="bo3">Bo3</option>
-        <option value="bo5">Bo5</option>
-      </select>
-      <button type="submit">새 시리즈 시작</button>
-    </form>
+    <div class="new-series-card">
+      <h3 class="new-series-title">새 내전 기록 시작</h3>
+      <form id="seriesForm">
+        <div class="field-group">
+          <label for="matchDateInput">날짜</label>
+          <input type="date" id="matchDateInput" required>
+        </div>
+        <div class="field-group">
+          <label for="formatInput">경기 방식</label>
+          <select id="formatInput">
+            <option value="bo3">Bo3 (3판 2선승)</option>
+            <option value="bo5">Bo5 (5판 3선승)</option>
+          </select>
+        </div>
+        <button type="submit" class="primary-btn">시작하기</button>
+      </form>
+    </div>
     <div id="activeSeries"></div>
     <h3>시리즈 목록</h3>
     <ul id="seriesList"></ul>
