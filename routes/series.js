@@ -1,6 +1,6 @@
 const express = require('express');
 const db = require('../db');
-const { getUsedChampionIds } = require('../lib/fearless');
+const { getUsedChampionIds, getUsedChampionIdsExcludingSet } = require('../lib/fearless');
 
 const router = express.Router();
 const LANES = ['top', 'jungle', 'mid', 'adc', 'support'];
@@ -30,6 +30,10 @@ router.get('/:id', (req, res) => {
 });
 
 router.get('/:id/used-champions', (req, res) => {
+  if (req.query.excludeSet) {
+    res.json([...getUsedChampionIdsExcludingSet(req.params.id, Number(req.query.excludeSet))]);
+    return;
+  }
   const beforeSet = Number(req.query.beforeSet) || 999;
   res.json([...getUsedChampionIds(req.params.id, beforeSet)]);
 });
@@ -128,29 +132,28 @@ router.post('/:id/sets', (req, res) => {
   res.status(201).json(serializeSeriesDetail(db.prepare('SELECT * FROM series WHERE id = ?').get(series.id)));
 });
 
-// 시리즈의 가장 최근 세트만 수정 가능 — 선수 구성(로스터/진영)은 고정, 라인/챔피언/밴/승자만 변경 가능.
-// 중간 세트를 고치면 피어리스 사용 챔피언 목록과 로스터 정체성까지 연쇄적으로 재계산해야 해서 범위를 의도적으로 제한함.
+// 어느 세트든 수정 가능 — 단, 선수 구성(로스터/진영)은 고정, 라인/챔피언/밴/승자만 변경 가능.
+// 안전장치 두 가지: ① 피어리스 검증은 "이 세트를 제외한 시리즈 전체"(이전+이후) 기준 ② 승자를 바꿔서
+// 시리즈가 더 이른 세트에서 이미 끝났어야 하는 상황이 되는데 그 뒤에 실제 기록된 세트가 있으면 거부.
 router.put('/:id/sets/:setId', (req, res) => {
   const series = db.prepare('SELECT * FROM series WHERE id = ?').get(req.params.id);
   if (!series) return res.status(404).json({ error: '시리즈를 찾을 수 없습니다' });
 
-  const lastSet = db.prepare('SELECT * FROM sets WHERE series_id = ? ORDER BY set_number DESC LIMIT 1').get(series.id);
-  if (!lastSet || String(lastSet.id) !== req.params.setId) {
-    return res.status(400).json({ error: '가장 최근 세트만 수정할 수 있습니다' });
-  }
+  const targetSet = db.prepare('SELECT * FROM sets WHERE id = ? AND series_id = ?').get(req.params.setId, series.id);
+  if (!targetSet) return res.status(404).json({ error: '세트를 찾을 수 없습니다' });
 
   const { blueTeam, redTeam, bans = {}, winner } = req.body;
   const validationError = validateSetPayload(blueTeam, redTeam, bans, winner);
   if (validationError) return res.status(400).json({ error: validationError });
 
-  const existingParticipants = db.prepare('SELECT player_id, team FROM set_participants WHERE set_id = ?').all(lastSet.id);
+  const existingParticipants = db.prepare('SELECT player_id, team FROM set_participants WHERE set_id = ?').all(targetSet.id);
   const existingBlueIds = new Set(existingParticipants.filter((p) => p.team === 'blue').map((p) => p.player_id));
   const existingRedIds = new Set(existingParticipants.filter((p) => p.team === 'red').map((p) => p.player_id));
   if (!sameMembers(blueTeam.map((p) => p.playerId), existingBlueIds) || !sameMembers(redTeam.map((p) => p.playerId), existingRedIds)) {
     return res.status(400).json({ error: '세트 수정 시 선수 구성(팀)은 바꿀 수 없습니다. 라인/챔피언/밴/승자만 수정 가능합니다.' });
   }
 
-  const used = getUsedChampionIds(series.id, lastSet.set_number);
+  const used = getUsedChampionIdsExcludingSet(series.id, targetSet.id);
   const allChampionIds = [
     ...blueTeam.map((p) => p.championId),
     ...redTeam.map((p) => p.championId),
@@ -160,26 +163,45 @@ router.put('/:id/sets/:setId', (req, res) => {
   const conflict = allChampionIds.find((cid) => used.has(cid));
   if (conflict) {
     return res.status(400).json({
-      error: `챔피언 ID ${conflict}는 이 시리즈의 이전 세트에서 이미 사용되어 다시 사용할 수 없습니다 (피어리스 드래프트 규칙).`,
+      error: `챔피언 ID ${conflict}는 이 시리즈의 다른 세트에서 이미 사용되어 사용할 수 없습니다 (피어리스 드래프트 규칙).`,
     });
   }
 
-  const winnerRoster = winner === 'blue' ? lastSet.blue_roster : lastSet.red_roster;
+  const winnerRoster = winner === 'blue' ? targetSet.blue_roster : targetSet.red_roster;
+
+  // 이 변경대로면 시리즈가 몇 세트에서 끝났어야 하는지 시뮬레이션 — 그 뒤에 이미 기록된 세트가 있으면 모순
+  const otherSets = db.prepare('SELECT set_number, winner_roster FROM sets WHERE series_id = ? AND id != ?')
+    .all(series.id, targetSet.id);
+  const simulatedSets = [...otherSets, { set_number: targetSet.set_number, winner_roster: winnerRoster }]
+    .sort((a, b) => a.set_number - b.set_number);
+  const maxSetNumber = simulatedSets[simulatedSets.length - 1].set_number;
+  const needed = SETS_TO_WIN[series.format];
+  const tally = { A: 0, B: 0 };
+  let decidedAt = null;
+  for (const s of simulatedSets) {
+    tally[s.winner_roster] += 1;
+    if (!decidedAt && (tally.A >= needed || tally.B >= needed)) decidedAt = s.set_number;
+  }
+  if (decidedAt && decidedAt < maxSetNumber) {
+    return res.status(400).json({
+      error: `이 수정대로면 시리즈가 ${decidedAt}세트에서 이미 끝났어야 합니다. 그 이후 세트가 이미 기록되어 있어 모순됩니다 — 먼저 ${decidedAt}세트 이후 세트를 삭제한 뒤 수정해주세요.`,
+    });
+  }
 
   const runInTransaction = db.transaction(() => {
-    db.prepare('DELETE FROM set_participants WHERE set_id = ?').run(lastSet.id);
-    db.prepare('DELETE FROM set_bans WHERE set_id = ?').run(lastSet.id);
-    db.prepare('UPDATE sets SET winner_roster = ? WHERE id = ?').run(winnerRoster, lastSet.id);
+    db.prepare('DELETE FROM set_participants WHERE set_id = ?').run(targetSet.id);
+    db.prepare('DELETE FROM set_bans WHERE set_id = ?').run(targetSet.id);
+    db.prepare('UPDATE sets SET winner_roster = ? WHERE id = ?').run(winnerRoster, targetSet.id);
 
     const insertParticipant = db.prepare(
       'INSERT INTO set_participants (set_id, player_id, team, lane, champion_id) VALUES (?, ?, ?, ?, ?)'
     );
-    blueTeam.forEach((p) => insertParticipant.run(lastSet.id, p.playerId, 'blue', p.lane, p.championId));
-    redTeam.forEach((p) => insertParticipant.run(lastSet.id, p.playerId, 'red', p.lane, p.championId));
+    blueTeam.forEach((p) => insertParticipant.run(targetSet.id, p.playerId, 'blue', p.lane, p.championId));
+    redTeam.forEach((p) => insertParticipant.run(targetSet.id, p.playerId, 'red', p.lane, p.championId));
 
     const insertBan = db.prepare('INSERT INTO set_bans (set_id, team, champion_id, ban_order) VALUES (?, ?, ?, ?)');
-    (bans.blue || []).forEach((cid, i) => insertBan.run(lastSet.id, 'blue', cid, i + 1));
-    (bans.red || []).forEach((cid, i) => insertBan.run(lastSet.id, 'red', cid, i + 1));
+    (bans.blue || []).forEach((cid, i) => insertBan.run(targetSet.id, 'blue', cid, i + 1));
+    (bans.red || []).forEach((cid, i) => insertBan.run(targetSet.id, 'red', cid, i + 1));
 
     recomputeSeriesStatus(series.id, series.format);
   });

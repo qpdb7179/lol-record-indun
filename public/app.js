@@ -144,7 +144,7 @@ async function renderActiveSeries() {
   if (state.editingSetId && !editingSet) state.editingSetId = null;
 
   if (editingSet) {
-    state.usedFromPreviousSets = new Set(await api(`/api/series/${s.id}/used-champions?beforeSet=${editingSet.setNumber}`));
+    state.usedFromPreviousSets = new Set(await api(`/api/series/${s.id}/used-champions?excludeSet=${editingSet.id}`));
     el.innerHTML = `
       ${renderSeriesCard(s)}
       <form id="setForm">
@@ -484,18 +484,18 @@ function renderSeriesCard(s) {
           <button type="button" class="delete-series-btn" data-id="${s.id}">삭제</button>
         </div>
       </div>
-      ${s.sets.map((set, i) => renderGameCard(set, i === s.sets.length - 1)).join('') || '<p class="muted series-empty">아직 기록된 세트가 없습니다.</p>'}
+      ${s.sets.map((set) => renderGameCard(set)).join('') || '<p class="muted series-empty">아직 기록된 세트가 없습니다.</p>'}
     </div>
   `;
 }
 
-function renderGameCard(set, isLast) {
+function renderGameCard(set) {
   const redWon = set.winnerRoster === set.redRoster;
   return `
     <div class="game-card">
       <div class="game-card-header">
         <span>Game ${set.setNumber}</span>
-        ${isLast ? `<button type="button" class="edit-game-btn" data-set-id="${set.id}">수정</button>` : ''}
+        <button type="button" class="edit-game-btn" data-set-id="${set.id}">수정</button>
       </div>
       <div class="game-teams">
         ${renderGameTeamColumn('red', set.redTeam, set.bans.red, redWon)}
