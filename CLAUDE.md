@@ -32,13 +32,19 @@ npm start
   - **2026-08-20 버그 수정**: 원래 `summoner-v4`로 암호화된 summonerId를 받아 `league-v4`(`by-summoner`)를 호출했는데, Riot API가 `summoner-v4` 응답에서 `id` 필드를 더 이상 내려주지 않게 바뀌어서 `by-summoner/undefined` 호출이 되며 403이 발생했음. `league-v4`가 이제 `by-puuid`도 지원해서 summoner-v4 호출 자체를 없애고 puuid로 직접 조회하도록 변경(`players.summoner_id` 컬럼도 함께 제거).
 - `lib/dataDragon.js` — Riot Data Dragon(`ddragon.leagueoflegends.com`)에서 최신 패치의 챔피언 목록(한글명+이미지 URL)을 가져와 6시간 캐싱. API 키 불필요.
 - `lib/fearless.js` — `getUsedChampionIds(seriesId, beforeSetNumber)`: 같은 시리즈의 이전 세트들에서 밴/픽으로 쓰인 챔피언 id 집합을 반환. 피어리스 드래프트(이번 시즌 LCK 방식 — 한 시리즈 내에서 이미 쓴 챔피언은 이후 세트에서 밴/픽 불가) 검증에 사용.
-- `routes/players.js` — 참가자 등록(Riot API 조회 후 upsert)/목록/새로고침/삭제. op.gg 링크는 `https://op.gg/lol/summoners/kr/{gameName}-{tagLine}` 형태로 생성만 하고 스크래핑은 하지 않음(ToS 이슈 회피).
+- `routes/players.js` — 참가자 등록(Riot API 조회 후 upsert)/목록/새로고침/삭제. `displayName`(실명/닉네임, 선택)은 Riot 데이터와 무관하게 사용자가 직접 입력해 저장. op.gg 링크는 `https://op.gg/lol/summoners/kr/{gameName}-{tagLine}` 형태로 생성만 하고 스크래핑은 하지 않음(ToS 이슈 회피).
 - `routes/series.js` — 시리즈(Bo3/Bo5) 생성 및 세트 기록의 핵심 로직:
   - **로스터 A/B 개념**: 시리즈 내 두 팀은 색(블루/레드)이 세트마다 바뀌므로, 1세트에서 블루였던 5명을 로스터 A, 레드였던 5명을 로스터 B로 `series_rosters`에 고정 저장. 이후 세트는 제출된 10명이 정확히 로스터 A/B와 일치해야 하며, 직전 세트와 같은 진영(블루 로스터)이면 400 에러(매 세트 진영 스왑 강제).
   - **피어리스 검증**: `lib/fearless.js`로 이전 세트 사용 챔피언 집합을 구해 새 세트의 밴+픽 전체와 교집합 있으면 400.
+  - **세트 내 중복 검증**: `validateSetPayload`가 양팀 픽 10개 + 양팀 밴 전체를 합쳐 같은 세트 안에서 챔피언이 중복되면 400 (피어리스와 별개로, 애초에 한 세트 안에서도 같은 챔프를 두 명이 쓸 수 없다는 기본 규칙).
   - **시리즈 자동 종료**: 세트 저장 후 로스터별 승수를 집계해 Bo3=2승/Bo5=3승 도달 시 `series.status='completed'`.
+  - `DELETE /:id`— 시리즈 삭제(세트/로스터/참가자/밴은 FK `ON DELETE CASCADE`로 함께 삭제).
 - `routes/stats.js` — 챔피언별 픽률/승률/밴률, 플레이어별 승률·선호 라인. 승패 판정은 `set.team(blue/red)`가 `sets.blue_roster/red_roster` 중 `winner_roster`와 일치하는지로 계산(로스터 A/B ↔ 그날의 블루/레드 매핑이 세트마다 바뀌므로 매번 join해서 판정).
-- `public/app.js` — 프론트 전체 로직. 3탭(참가자 관리/전적 기록/통계) 전환. 전적 기록 탭은 2세트부터 직전 세트의 로스터 정보(`series.rosters`)를 이용해 블루/레드 선수 select를 자동으로 채우고 잠금(진영만 스왑, 선수는 고정) — 서버의 로스터 검증 로직과 반드시 짝이 맞아야 함.
+- `public/app.js` — 프론트 전체 로직. 3탭(참가자 관리/전적 기록/통계) 전환.
+  - **챔피언 이미지 피커**: `<select>` 대신 버튼(`.champion-slot`) 클릭 → 검색 가능한 이미지 그리드 모달(`#championPickerModal`). `computeDisabledChampionIds()`가 피어리스(이전 세트, `/api/series/:id/used-champions`) + 현재 폼에서 이미 선택된 챔프(자기 자신 제외)를 합쳐 실시간으로 회색처리/선택불가 처리 — 백엔드 중복 검증과 이중 방어.
+  - **드래그로 라인 교체**: `.lane-row`에 `draggable`, 같은 `.team-block` 안에서 드롭하면 두 라인의 (선수+챔피언)을 통째로 스왑(`swapRowContents`) — 챔피언은 라인이 아니라 선수를 따라감.
+  - **2세트 이후 기본 배정**: `laneMapFromLastSet()`으로 직전 세트에 그 로스터가 서 있던 라인을 그대로 기본값으로 채워줌(드래그로 바꿀 수 있음). 이때 로스터 항목은 `{playerId, riotId, displayName}` 형태라 `state.players`의 `{id, ...}`와 필드명이 달라서, `renderTeamInputs`에서 `id: p.id ?? p.playerId`로 통일해야 함 — **한 번 여기서 실제로 버그 났었음**(값이 `"undefined"` 문자열로 들어가 2세트 폼이 통째로 깨짐), 이 필드 통일 없이 로스터 배열을 직접 select 옵션에 넣지 말 것.
+  - **시리즈/게임 카드(다크 UI)**: `renderSeriesCard()`/`renderGameCard()` — `/root/example.png` 참고해서 만든 다크 테마. 상단 배지(포맷/피어리스(하드) 고정 표기/스코어/날짜/상태/삭제), 게임별로 레드(왼쪽 고정)-VS-블루(오른쪽 고정) 컬럼(그날의 실제 진영 기준, 로스터 기준 아님), 밴 아이콘 행, 라인 아이콘(SVG, `LANE_ICONS`)+챔프 원형 아바타+선수명(표시이름)+챔프명. **주의**: 게임별로 "레드팀"이 항상 왼쪽인 건 색 기준 레이아웃이고, 상단 스코어(`X - Y`)는 로스터 A/B 기준이라 서로 축이 다름 — 의도적 설계(레퍼런스 이미지와 동일한 방식).
 
 ### 데이터 모델 요약
 `players`(riot 계정+티어+숙련도 캐시) → `series`(날짜+포맷+상태) → `series_rosters`(시리즈별 로스터 A/B 고정) → `sets`(세트별 블루/레드 로스터+승자) → `set_participants`(세트별 선수-라인-챔프) / `set_bans`(세트별 밴 목록).
@@ -62,3 +68,4 @@ npm start
 - **2026-08-20**: GHCR 패키지 visibility를 public으로 바꿔도 계속 401(익명 pull 거부)이 나서 — UI 반영 지연인지 다른 원인인지 확인이 안 돼 — 대신 **imagePullSecret**(`ghcr-pull-secret`, `gh auth token`으로 발급한 개인 토큰 사용, git 미추적)으로 확정. private 유지가 오히려 기본값으로 더 안전해서 그대로 감.
 - **2026-08-20**: 실제 Riot API 키로 참가자 등록 테스트 중 403 Forbidden 발견. 원인은 Riot이 `summoner-v4` 응답에서 암호화된 `id`(summonerId) 필드를 더 이상 내려주지 않게 바뀐 것 — 기존 코드가 `league-v4`를 `by-summoner/{undefined}`로 호출하고 있었음. `league-v4`가 이제 `by-puuid`도 지원해서 `lib/riot.js`에서 summoner-v4 호출 자체를 제거하고 puuid 기반으로 통일(`players.summoner_id` 컬럼도 함께 제거, 당시 DB에 실제 데이터 없어서 무손실). 실제 계정("Hide on bush#KR1")으로 티어(챌린저)·숙련도 top3까지 정상 조회 확인.
 - **2026-08-20**: 도메인 `lol-record.indun.site`(가비아 관리) A레코드를 사용자가 직접 추가, certbot으로 Let's Encrypt 인증서 발급 완료(만료 2026-11-18, 자동 갱신 등록됨). `https://lol-record.indun.site`로 전체 배포 파이프라인(GitHub push → Actions → GHCR → ArgoCD → k3s → nginx) 엔드투엔드 검증 완료. **재구축 프로젝트 1차 완료.**
+- **2026-08-20**: 사용자 피드백으로 전적 기록 탭 대폭 개선 — (1) 같은 세트 안에서 챔피언 중복 선택되던 버그 수정, (2) 챔피언 select를 이미지+검색 그리드 모달로 교체, (3) 같은 팀 내 선수 드래그로 라인 교체(챔피언도 같이 이동), (4) `/root/example.png`를 참고한 다크 테마 시리즈/게임 카드로 재설계, (5) 참가자 표시이름(실명) 필드 추가, (6) 시리즈 삭제 API/버튼 추가. indun의 Playwright 셋업을 이 프로젝트에도 적용해 실제 브라우저로 챔피언 피커·드래그스왑·중복방지·삭제·통계까지 전 플로우 검증 — 이 과정에서 "2세트 이후 로스터 select가 `p.playerId`를 `id`로 못 읽어 `option value="undefined"`가 되는" 실제 버그를 찾아 수정함(코드만 봐서는 안 보이고 실제 실행해봐야 드러나는 종류의 버그였음, 위 Architecture 섹션 `public/app.js` 항목 참고). 기존 배포 DB에 `display_name` 컬럼이 없어서 `db.js`에 `PRAGMA table_info` 기반 자동 마이그레이션 추가. 배포 후 라이브 사이트에서 사용자가 이미 실제로 등록해둔 참가자 10명(실계정, 실 티어) 데이터가 마이그레이션으로 손실 없이 유지됨을 확인.
