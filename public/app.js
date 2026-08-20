@@ -35,6 +35,17 @@ async function init() {
   state.championById = new Map(state.champions.map((c) => [c.championId, c]));
   await loadPlayers();
   await loadSeriesList();
+  resetMatchDateToToday();
+}
+
+// 내전은 보통 그날 바로 기록하므로 날짜 입력을 매번 새로 고르지 않아도 되게 기본값을 오늘로 채워둠.
+// toISOString()은 UTC 기준이라 자정 근처에 하루 밀릴 수 있어 로컬 타임존 기준으로 직접 조합.
+function resetMatchDateToToday() {
+  const now = new Date();
+  const yyyy = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, '0');
+  const dd = String(now.getDate()).padStart(2, '0');
+  document.getElementById('matchDateInput').value = `${yyyy}-${mm}-${dd}`;
 }
 
 function championLabel(id) {
@@ -400,6 +411,7 @@ document.getElementById('seriesForm').addEventListener('submit', async (e) => {
   state.activeSeries = await api(`/api/series/${series.id}`);
   await renderActiveSeries();
   await loadSeriesList();
+  resetMatchDateToToday();
 });
 
 function laneMapFromLastSet(lastSet, roster) {

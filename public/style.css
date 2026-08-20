@@ -1,4 +1,5 @@
 :root {
+  color-scheme: dark; /* input[type=date] 등 브라우저 네이티브 컨트롤(달력 팝업/아이콘)을 다크로 렌더링 — 없으면 밝은 배경 기준으로 그려져서 다크 카드 위에서 아이콘이 안 보이거나 팝업만 하얗게 튐 */
   --color-blue: #4d82f3;
   --color-blue-text: #8fb4ff;
   --color-red: #e05a5a;
@@ -33,6 +34,7 @@ h3 { color: var(--text); }
 .new-series-card { background: var(--card-bg); border: 1px solid var(--accent-gold); border-radius: 10px; padding: 16px; margin-bottom: 20px; }
 .new-series-title { margin: 0 0 12px; font-size: 15px; }
 #seriesForm { display: flex; gap: 16px; align-items: flex-end; flex-wrap: wrap; }
+#matchDateInput { min-width: 150px; }
 .field-group { display: flex; flex-direction: column; gap: 4px; }
 .field-group label { font-size: 12px; color: var(--muted); }
 .primary-btn { background: var(--color-blue); color: #fff; border-color: var(--color-blue); font-weight: 600; padding: 8px 22px; }
