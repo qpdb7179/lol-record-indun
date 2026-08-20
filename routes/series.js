@@ -34,13 +34,18 @@ router.get('/:id/used-champions', (req, res) => {
   res.json([...getUsedChampionIds(req.params.id, beforeSet)]);
 });
 
+router.delete('/:id', (req, res) => {
+  db.prepare('DELETE FROM series WHERE id = ?').run(req.params.id); // 세트/로스터/참가자/밴은 ON DELETE CASCADE로 함께 삭제됨
+  res.status(204).end();
+});
+
 router.post('/:id/sets', (req, res) => {
   const series = db.prepare('SELECT * FROM series WHERE id = ?').get(req.params.id);
   if (!series) return res.status(404).json({ error: '시리즈를 찾을 수 없습니다' });
   if (series.status === 'completed') return res.status(400).json({ error: '이미 종료된 시리즈입니다' });
 
   const { blueTeam, redTeam, bans = {}, winner } = req.body;
-  const validationError = validateSetPayload(blueTeam, redTeam, winner);
+  const validationError = validateSetPayload(blueTeam, redTeam, bans, winner);
   if (validationError) return res.status(400).json({ error: validationError });
 
   const existingSets = db.prepare('SELECT * FROM sets WHERE series_id = ? ORDER BY set_number').all(series.id);
@@ -133,7 +138,7 @@ function sameMembers(arr, set) {
   return arr.length === set.size && arr.every((x) => set.has(x));
 }
 
-function validateSetPayload(blueTeam, redTeam, winner) {
+function validateSetPayload(blueTeam, redTeam, bans, winner) {
   if (!Array.isArray(blueTeam) || blueTeam.length !== 5) return 'blueTeam은 5명이어야 합니다';
   if (!Array.isArray(redTeam) || redTeam.length !== 5) return 'redTeam은 5명이어야 합니다';
   if (!['blue', 'red'].includes(winner)) return "winner는 'blue' 또는 'red'여야 합니다";
@@ -147,6 +152,18 @@ function validateSetPayload(blueTeam, redTeam, winner) {
       return `각 팀은 ${LANES.join('/')} 라인이 정확히 한 번씩 있어야 합니다`;
     }
     if (team.some((p) => !p.championId)) return '모든 참가자는 챔피언을 선택해야 합니다';
+  }
+
+  const allChampionIdsInSet = [
+    ...blueTeam.map((p) => p.championId),
+    ...redTeam.map((p) => p.championId),
+    ...(bans.blue || []),
+    ...(bans.red || []),
+  ];
+  const seen = new Set();
+  for (const cid of allChampionIdsInSet) {
+    if (seen.has(cid)) return `챔피언 ID ${cid}가 이 세트 안에서 중복 선택(픽/밴)되었습니다`;
+    seen.add(cid);
   }
   return null;
 }
@@ -165,14 +182,14 @@ function serializeSeries(s) {
 function serializeSeriesDetail(series) {
   const sets = db.prepare('SELECT * FROM sets WHERE series_id = ? ORDER BY set_number').all(series.id);
   const rosters = db.prepare(`
-    SELECT sr.roster, p.id AS player_id, p.riot_game_name, p.riot_tag_line
+    SELECT sr.roster, p.id AS player_id, p.riot_game_name, p.riot_tag_line, p.display_name
     FROM series_rosters sr JOIN players p ON p.id = sr.player_id
     WHERE sr.series_id = ?
   `).all(series.id);
 
   const setDetails = sets.map((set) => {
     const participants = db.prepare(`
-      SELECT sp.*, p.riot_game_name, p.riot_tag_line FROM set_participants sp
+      SELECT sp.*, p.riot_game_name, p.riot_tag_line, p.display_name FROM set_participants sp
       JOIN players p ON p.id = sp.player_id WHERE sp.set_id = ?
     `).all(set.id);
     const bans = db.prepare('SELECT * FROM set_bans WHERE set_id = ? ORDER BY team, ban_order').all(set.id);
@@ -194,15 +211,25 @@ function serializeSeriesDetail(series) {
   return {
     ...serializeSeries(series),
     rosters: {
-      A: rosters.filter((r) => r.roster === 'A').map((r) => ({ playerId: r.player_id, riotId: `${r.riot_game_name}#${r.riot_tag_line}` })),
-      B: rosters.filter((r) => r.roster === 'B').map((r) => ({ playerId: r.player_id, riotId: `${r.riot_game_name}#${r.riot_tag_line}` })),
+      A: rosters.filter((r) => r.roster === 'A').map(serializeRosterPlayer),
+      B: rosters.filter((r) => r.roster === 'B').map(serializeRosterPlayer),
     },
     sets: setDetails,
   };
 }
 
+function serializeRosterPlayer(r) {
+  return { playerId: r.player_id, riotId: `${r.riot_game_name}#${r.riot_tag_line}`, displayName: r.display_name };
+}
+
 function serializeParticipant(p) {
-  return { playerId: p.player_id, riotId: `${p.riot_game_name}#${p.riot_tag_line}`, lane: p.lane, championId: p.champion_id };
+  return {
+    playerId: p.player_id,
+    riotId: `${p.riot_game_name}#${p.riot_tag_line}`,
+    displayName: p.display_name,
+    lane: p.lane,
+    championId: p.champion_id,
+  };
 }
 
 module.exports = router;

@@ -32,21 +32,37 @@ button:hover { background: var(--bg); }
 .top-champs img { width: 32px; height: 32px; border-radius: 50%; margin-right: 4px; }
 .player-actions { margin-top: 8px; display: flex; gap: 8px; font-size: 13px; }
 
+.set-form-title { margin: 24px 0 8px; }
 .team-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0; }
 .team-block { border: 1px solid var(--border); border-radius: 8px; padding: 12px; background: var(--card-bg); }
 .team-block.blue { border-top: 4px solid var(--color-blue); }
 .team-block.red { border-top: 4px solid var(--color-red); }
-.lane-row { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; }
-.lane-label { width: 36px; font-size: 13px; color: var(--muted); }
+.team-block h4 { margin: 0 0 10px; }
+.small { font-size: 11px; font-weight: normal; }
+
+.lane-row { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; padding: 4px; border-radius: 6px; cursor: grab; }
+.lane-row.dragging { opacity: 0.4; }
+.lane-row.drag-over { background: var(--bg); outline: 2px dashed var(--color-blue); }
+.drag-handle { color: var(--muted); cursor: grab; user-select: none; }
+.lane-icon { display: inline-flex; color: var(--muted); flex-shrink: 0; }
+.lane-row .player-select { flex: 1; min-width: 0; }
+
+.champion-slot { display: flex; align-items: center; gap: 6px; padding: 3px 8px 3px 3px; min-width: 120px; }
+.champion-slot-img { width: 24px; height: 24px; border-radius: 50%; object-fit: cover; }
+.champion-slot-empty { color: var(--muted); font-size: 12px; }
+
 .ban-section { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-.ban-list { list-style: none; padding: 0; margin: 8px 0 0; display: flex; gap: 6px; flex-wrap: wrap; width: 100%; }
-.ban-list li { background: var(--bg); border-radius: 999px; padding: 2px 8px; font-size: 12px; }
-.ban-list button { border: none; background: none; cursor: pointer; padding: 0 0 0 4px; }
+.ban-label { font-size: 12px; color: var(--muted); }
+.ban-slots { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+.ban-slot-wrap { position: relative; display: inline-block; }
+.ban-slot { min-width: 0; padding: 3px; }
+.ban-slot .champion-slot-img { width: 28px; height: 28px; }
+.ban-slot span:not(.champion-slot-img) { display: none; }
+.ban-slot .champion-slot-empty { display: inline; font-size: 16px; padding: 0 4px; }
+.remove-ban { position: absolute; top: -6px; right: -6px; width: 16px; height: 16px; padding: 0; line-height: 1; border-radius: 50%; font-size: 11px; background: var(--color-red); color: #fff; border: none; }
+.add-ban-btn { border-radius: 50%; width: 28px; height: 28px; padding: 0; font-size: 16px; line-height: 1; }
 
 .winner-pick { display: flex; gap: 16px; margin: 12px 0; }
-.set-history { margin: 16px 0; }
-.set-summary { border-bottom: 1px solid var(--border); padding: 8px 0; font-size: 13px; }
-.set-detail { color: var(--muted); margin-top: 4px; }
 
 #seriesList { list-style: none; padding: 0; }
 #seriesList li { margin-bottom: 4px; }
@@ -54,3 +70,65 @@ button:hover { background: var(--bg); }
 
 table { width: 100%; border-collapse: collapse; margin-bottom: 24px; background: var(--card-bg); }
 th, td { border-bottom: 1px solid var(--border); padding: 8px; text-align: left; font-size: 13px; }
+
+/* ---- 챔피언 피커 모달 ---- */
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 100; }
+.modal-overlay.hidden { display: none; }
+.modal.champion-picker { background: var(--card-bg); border-radius: 10px; width: min(560px, 92vw); max-height: 80vh; display: flex; flex-direction: column; overflow: hidden; }
+.modal-header { display: flex; gap: 8px; padding: 12px; border-bottom: 1px solid var(--border); }
+.modal-header input { flex: 1; }
+#closeChampionPicker { border: none; background: none; font-size: 18px; padding: 0 6px; }
+.champion-grid { overflow-y: auto; padding: 12px; display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 8px; }
+.champion-grid-item { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 6px; border: 1px solid transparent; background: none; }
+.champion-grid-item img { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; }
+.champion-grid-item span { font-size: 11px; text-align: center; line-height: 1.2; }
+.champion-grid-item:hover:not(:disabled) { border-color: var(--color-blue); background: var(--bg); }
+.champion-grid-item:disabled { opacity: 0.25; cursor: not-allowed; }
+
+/* ---- 시리즈/게임 카드 (다크 UI) ---- */
+.series-card { background: #12182b; color: #e6e8ef; border: 1px solid #caa24a; border-radius: 10px; padding: 16px; margin: 16px 0; }
+.series-card-header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.series-badges { display: flex; align-items: center; gap: 8px; }
+.series-meta { display: flex; align-items: center; gap: 10px; }
+.series-date { font-size: 12px; color: #9aa3b8; }
+.series-score { font-size: 20px; font-weight: 700; margin-left: 4px; }
+.series-empty { padding: 8px 0; }
+
+.badge { display: inline-block; padding: 3px 10px; border-radius: 4px; font-size: 12px; font-weight: 700; }
+.badge-format { background: #4b3a1c; color: #e0c072; }
+.badge-fearless { background: #7a2222; color: #ffb4b4; }
+.badge-status-completed { background: #1f7a3f; color: #baf4cf; }
+.badge-status-in_progress { background: #3a3f55; color: #c9cfe6; }
+.badge-win { background: #1f7a3f; color: #baf4cf; }
+.badge-lose { background: #444a5e; color: #c9cfe6; }
+.delete-series-btn { border: 1px solid #a13a3a; color: #ff8f8f; background: transparent; border-radius: 6px; padding: 4px 10px; }
+.delete-series-btn:hover { background: #3a1414; }
+
+.game-card { background: #0e1424; border: 1px solid #232a42; border-radius: 8px; margin-top: 14px; overflow: hidden; }
+.game-card-header { padding: 6px 12px; font-size: 12px; color: #8891a8; border-bottom: 1px solid #232a42; }
+.game-teams { display: grid; grid-template-columns: 1fr auto 1fr; }
+.game-vs { display: flex; align-items: center; justify-content: center; padding: 0 10px; color: #6b7392; font-size: 12px; font-weight: 700; }
+.game-team-col { padding: 10px 14px; }
+.game-team-col.red { border-right: 1px solid #232a42; }
+.game-team-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.game-team-name { font-weight: 700; font-size: 13px; }
+.game-team-col.red .game-team-name { color: #ff8f8f; }
+.game-team-col.blue .game-team-name { color: #8fb4ff; }
+.game-ban-row { display: flex; align-items: center; gap: 4px; margin-bottom: 10px; }
+.ban-row-label { font-size: 11px; color: #6b7392; margin-right: 4px; }
+.ban-icon { width: 20px; height: 20px; border-radius: 50%; object-fit: cover; opacity: 0.85; }
+.game-player-row { display: flex; align-items: center; gap: 8px; padding: 5px 6px; border-radius: 6px; }
+.game-team-col.red .game-player-row { background: rgba(214, 69, 69, 0.08); }
+.game-team-col.blue .game-player-row { background: rgba(47, 111, 235, 0.1); }
+.game-player-row + .game-player-row { margin-top: 2px; }
+.game-player-row .lane-icon { color: #6b7392; }
+.game-champ-avatar { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; }
+.game-player-info { line-height: 1.3; min-width: 0; }
+.game-player-name { font-size: 12.5px; font-weight: 600; color: #e6e8ef; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.game-champ-name { font-size: 11px; color: #8891a8; }
+
+@media (max-width: 640px) {
+  .game-teams { grid-template-columns: 1fr; }
+  .game-vs { padding: 4px 0; }
+  .game-team-col.red { border-right: none; border-bottom: 1px solid #232a42; }
+}

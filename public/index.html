@@ -22,6 +22,7 @@
       <input id="gameNameInput" placeholder="게임 이름" required>
       <span>#</span>
       <input id="tagLineInput" placeholder="태그 (예: KR1)" required>
+      <input id="displayNameInput" placeholder="표시 이름 (선택, 예: 실명/닉네임)">
       <button type="submit">등록</button>
     </form>
     <p class="error" id="playerFormError"></p>
@@ -49,6 +50,16 @@
     <div id="playerStats"></div>
   </section>
 </main>
+
+<div id="championPickerModal" class="modal-overlay hidden">
+  <div class="modal champion-picker">
+    <div class="modal-header">
+      <input type="text" id="championSearchInput" placeholder="챔피언 검색...">
+      <button type="button" id="closeChampionPicker" aria-label="닫기">×</button>
+    </div>
+    <div class="champion-grid" id="championGrid"></div>
+  </div>
+</div>
 
 <script src="/app.js"></script>
 </body>

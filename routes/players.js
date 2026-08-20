@@ -10,22 +10,23 @@ router.get('/', (req, res) => {
 });
 
 router.post('/', async (req, res) => {
-  const { gameName, tagLine } = req.body;
+  const { gameName, tagLine, displayName } = req.body;
   if (!gameName || !tagLine) return res.status(400).json({ error: 'gameName, tagLine이 필요합니다' });
 
   try {
     const profile = await fetchPlayerProfile(gameName.trim(), tagLine.trim());
     const now = new Date().toISOString();
     db.prepare(`
-      INSERT INTO players (riot_game_name, riot_tag_line, puuid, current_tier, current_rank, current_lp, top_champions_json, last_synced_at)
-      VALUES (@gameName, @tagLine, @puuid, @tier, @rank, @leaguePoints, @topChampionsJson, @now)
+      INSERT INTO players (riot_game_name, riot_tag_line, display_name, puuid, current_tier, current_rank, current_lp, top_champions_json, last_synced_at)
+      VALUES (@gameName, @tagLine, @displayName, @puuid, @tier, @rank, @leaguePoints, @topChampionsJson, @now)
       ON CONFLICT(riot_game_name, riot_tag_line) DO UPDATE SET
-        puuid = excluded.puuid, current_tier = excluded.current_tier,
+        display_name = excluded.display_name, puuid = excluded.puuid, current_tier = excluded.current_tier,
         current_rank = excluded.current_rank, current_lp = excluded.current_lp,
         top_champions_json = excluded.top_champions_json, last_synced_at = excluded.last_synced_at
     `).run({
       gameName: profile.gameName,
       tagLine: profile.tagLine,
+      displayName: displayName ? displayName.trim() : null,
       puuid: profile.puuid,
       tier: profile.tier,
       rank: profile.rank,
@@ -69,6 +70,7 @@ function serialize(p) {
     id: p.id,
     gameName: p.riot_game_name,
     tagLine: p.riot_tag_line,
+    displayName: p.display_name,
     riotId: `${p.riot_game_name}#${p.riot_tag_line}`,
     tier: p.current_tier,
     rank: p.current_rank,

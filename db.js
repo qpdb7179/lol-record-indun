@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS players (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   riot_game_name TEXT NOT NULL,
   riot_tag_line TEXT NOT NULL,
+  display_name TEXT,
   puuid TEXT,
   current_tier TEXT,
   current_rank TEXT,
@@ -68,5 +69,12 @@ CREATE TABLE IF NOT EXISTS set_bans (
   PRIMARY KEY (set_id, team, ban_order)
 );
 `);
+
+// CREATE TABLE IF NOT EXISTS는 이미 존재하는 테이블에 새 컬럼을 추가해주지 않으므로,
+// 기존 배포본에 display_name 컬럼이 없다면 여기서 보강한다.
+const playerColumns = db.prepare("PRAGMA table_info(players)").all().map((c) => c.name);
+if (!playerColumns.includes('display_name')) {
+  db.exec('ALTER TABLE players ADD COLUMN display_name TEXT');
+}
 
 module.exports = db;
