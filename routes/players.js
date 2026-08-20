@@ -1,6 +1,6 @@
 const express = require('express');
 const db = require('../db');
-const { fetchPlayerProfile, fetchRecentChampionStats, RECENT_GAMES_COUNT, RANKED_QUEUE_ID } = require('../lib/riot');
+const { fetchPlayerProfile, fetchRecentChampionStats, RECENT_GAMES_COUNT, RANKED_QUEUE_GAMES_COUNT, RANKED_QUEUE_ID } = require('../lib/riot');
 
 const router = express.Router();
 const RECENT_STATS_CACHE_MS = 60 * 60 * 1000; // 1시간 — match-v5 호출량이 커서(프로필당 1+N건) 매번 새로 안 불러옴
@@ -115,7 +115,8 @@ router.post('/:id/recent-stats', async (req, res) => {
   }
 
   try {
-    const stats = await fetchRecentChampionStats(player.puuid, RECENT_GAMES_COUNT, queueId);
+    const count = queueId ? RANKED_QUEUE_GAMES_COUNT : RECENT_GAMES_COUNT;
+    const stats = await fetchRecentChampionStats(player.puuid, count, queueId);
     const now = new Date().toISOString();
     db.prepare(`UPDATE players SET ${cols.json} = ?, ${cols.fetchedAt} = ? WHERE id = ?`)
       .run(JSON.stringify(stats), now, player.id);

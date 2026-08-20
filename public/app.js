@@ -118,7 +118,7 @@ function renderRankedQueueCard(label, tier, rank, lp, wins, losses, queueKey, pl
     <div class="ranked-card">
       <button type="button" class="ranked-card-header ranked-card-toggle" data-queue="${queueKey}" data-id="${playerId}">
         <span>${label}</span>
-        <span class="ranked-toggle-hint">챔피언별 성적 ${isOpen ? '▲' : '▾'}</span>
+        <span class="ranked-toggle-hint">최근 ${RANKED_QUEUE_GAMES_COUNT}판 챔피언별 성적 ${isOpen ? '▲' : '▾'}</span>
       </button>
       <div class="ranked-card-body">
         <img class="ranked-emblem" src="${tierIconUrl(tier)}" alt="${tier}">
@@ -135,7 +135,9 @@ function renderRankedQueueCard(label, tier, rank, lp, wins, losses, queueKey, pl
     </div>`;
 }
 
-const RECENT_GAMES_COUNT = 7; // 백엔드 lib/riot.js의 RECENT_GAMES_COUNT와 맞춰서 유지할 것
+// 백엔드 lib/riot.js의 RECENT_GAMES_COUNT/RANKED_QUEUE_GAMES_COUNT와 값이 같아야 함(자동 동기화 안 됨, 바꿀 때 둘 다 고칠 것)
+const RECENT_GAMES_COUNT = 10;
+const RANKED_QUEUE_GAMES_COUNT = 20;
 
 function formatRelativeTime(iso) {
   if (!iso) return '';
