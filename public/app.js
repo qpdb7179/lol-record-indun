@@ -11,6 +11,7 @@ const state = {
   expandedMatchId: null,
   soloQueueOpen: false,
   flexQueueOpen: false,
+  playerSearchQuery: '',
 };
 
 async function api(path, opts) {
@@ -84,9 +85,24 @@ async function loadPlayers() {
   state.players = await api('/api/players');
   renderPlayers();
 }
+// 인원이 늘어날 걸 대비해 정렬 기준을 바꾸는 대신(랭크순은 승급/강등마다 카드 위치가 흔들려서 오히려 헷갈림)
+// 이름순 정렬은 그대로 유지하고 검색으로 원하는 사람을 바로 찾을 수 있게 함(클라이언트 필터, API 재호출 없음).
 function renderPlayers() {
   const el = document.getElementById('playerList');
-  el.innerHTML = state.players.map((p) => `
+  const query = state.playerSearchQuery.trim().toLowerCase();
+  const filtered = query
+    ? state.players.filter((p) => p.riotId.toLowerCase().includes(query) || (p.displayName || '').toLowerCase().includes(query))
+    : state.players;
+
+  if (!state.players.length) {
+    el.innerHTML = '<p class="muted">등록된 참가자가 없습니다.</p>';
+    return;
+  }
+  if (!filtered.length) {
+    el.innerHTML = `<p class="muted">"${query}"에 맞는 참가자가 없습니다.</p>`;
+    return;
+  }
+  el.innerHTML = filtered.map((p) => `
     <div class="player-card" data-id="${p.id}">
       <div class="player-header">
         <div class="player-names">
@@ -104,8 +120,13 @@ function renderPlayers() {
         <button data-action="delete" data-id="${p.id}">삭제</button>
       </div>
     </div>
-  `).join('') || '<p class="muted">등록된 참가자가 없습니다.</p>';
+  `).join('');
 }
+
+document.getElementById('playerSearchInput').addEventListener('input', (e) => {
+  state.playerSearchQuery = e.target.value;
+  renderPlayers();
+});
 
 function renderQueueChampionStats(stats, fetchedAt) {
   if (!stats) return '<p class="muted">불러오는 중...</p>';
