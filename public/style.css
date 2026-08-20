@@ -68,9 +68,18 @@ select option { background: var(--input-bg); color: var(--text); }
 }
 .opgg-btn:hover { background: var(--border); }
 
-.set-form-title { margin: 24px 0 8px; color: var(--text); }
+.set-form-title { margin: 24px 0 8px; color: var(--text); display: flex; align-items: center; gap: 12px; }
+.load-roster-btn { font-size: 12px; font-weight: normal; border: 1px solid var(--border-strong); color: var(--muted); background: transparent; border-radius: 6px; padding: 3px 10px; }
+.load-roster-btn:hover { background: var(--input-bg); color: var(--text); }
 .team-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0; }
-.team-block { border: 1px solid var(--border); border-radius: 8px; padding: 12px; background: var(--card-bg); }
+/* 결과 카드(.game-teams)는 진작에 모바일 대응이 있었는데 정작 더 자주 쓰는 입력 폼(.team-columns)은
+   빠져있어서 좁은 화면에서 레드팀 컬럼이 화면 밖으로 밀려나가던 문제 — 1열로 접음. */
+@media (max-width: 640px) {
+  .team-columns { grid-template-columns: 1fr; }
+}
+/* min-width:0 없으면 그리드 트랙이 1fr이어도 안의 챔피언 슬롯(.champion-slot min-width:120px) 같은
+   콘텐츠의 최소 크기에 맞춰 억지로 늘어남 — .match-detail-team 때와 같은 계열의 그리드 버그, 위 CLAUDE.md 참고. */
+.team-block { min-width: 0; border: 1px solid var(--border); border-radius: 8px; padding: 12px; background: var(--card-bg); }
 .team-block.blue { border-top: 4px solid var(--color-blue); }
 .team-block.red { border-top: 4px solid var(--color-red); }
 .team-block h4 { margin: 0 0 10px; color: var(--text); }
@@ -104,6 +113,8 @@ select option { background: var(--input-bg); color: var(--text); }
 
 #seriesList { list-style: none; padding: 0; }
 #seriesList li { margin-bottom: 4px; }
+.series-date-heading { margin: 20px 0 6px; padding-bottom: 4px; border-bottom: 1px solid var(--border); font-size: 13px; font-weight: 700; color: var(--muted); }
+.series-date-heading:first-child { margin-top: 0; }
 .series-link { width: 100%; text-align: left; display: flex; justify-content: space-between; align-items: center; }
 .series-link-chevron { color: var(--muted); font-size: 11px; }
 .series-expand:not(:empty) { margin: 4px 0 12px; }
@@ -228,9 +239,12 @@ tbody tr:hover { background: var(--input-bg); }
 .delete-series-btn:hover { background: #3a1414; }
 .edit-game-btn { border: 1px solid var(--border-strong); color: var(--muted); background: transparent; border-radius: 6px; padding: 2px 10px; font-size: 12px; }
 .edit-game-btn:hover { background: var(--input-bg); color: var(--text); }
+.delete-game-btn { border: 1px solid #a13a3a; color: var(--color-red-text); background: transparent; border-radius: 6px; padding: 2px 10px; font-size: 12px; }
+.delete-game-btn:hover { background: #3a1414; }
 
 .game-card { background: var(--card-bg-2); border: 1px solid var(--border); border-radius: 8px; margin-top: 14px; overflow: hidden; }
 .game-card-header { display: flex; justify-content: space-between; align-items: center; padding: 6px 12px; font-size: 12px; color: var(--muted); border-bottom: 1px solid var(--border); }
+.game-card-actions { display: flex; gap: 6px; }
 .game-teams { display: grid; grid-template-columns: 1fr auto 1fr; }
 .game-vs { display: flex; align-items: center; justify-content: center; padding: 0 10px; color: #6b7392; font-size: 12px; font-weight: 700; }
 .game-team-col { padding: 10px 14px; }

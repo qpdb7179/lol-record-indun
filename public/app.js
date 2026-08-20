@@ -504,7 +504,10 @@ async function renderActiveSeries() {
   el.innerHTML = `
     ${renderSeriesCard(s)}
     <form id="setForm">
-      <h4 class="set-form-title">${nextSetNumber}세트 입력</h4>
+      <h4 class="set-form-title">
+        ${nextSetNumber}세트 입력
+        ${nextSetNumber === 1 ? '<button type="button" id="loadLastRosterBtn" class="load-roster-btn">지난 로스터 불러오기</button>' : ''}
+      </h4>
       <div class="team-columns">
         ${renderTeamInputs('blue', bluePlayers, blueDefaults)}
         ${renderTeamInputs('red', redPlayers, redDefaults)}
@@ -518,8 +521,36 @@ async function renderActiveSeries() {
     </form>
   `;
   document.getElementById('setForm').addEventListener('submit', submitSet);
+  if (nextSetNumber === 1) {
+    document.getElementById('loadLastRosterBtn').addEventListener('click', () => loadLastRoster(s.id));
+  }
   attachDragHandlers(el);
   updatePlayerSelectOptions();
+}
+
+// 매번 10명을 처음부터 고르지 않아도 되게, 가장 최근에 실제로 세트가 기록된(=로스터가 확정된)
+// 다른 시리즈를 찾아서 그 세트1의 블루/레드 팀(선수+라인)을 그대로 채워줌. 챔피언은 시리즈마다
+// 피어리스가 초기화되므로 일부러 안 채움(선수/라인만 재사용).
+async function loadLastRoster(currentSeriesId) {
+  const candidates = state.seriesSummaries.filter((s) => s.id !== currentSeriesId).slice(0, 20);
+  for (const candidate of candidates) {
+    const detail = await api(`/api/series/${candidate.id}`);
+    const set1 = detail.sets.find((set) => set.setNumber === 1);
+    if (!set1) continue;
+    applyRosterToForm('blue', set1.blueTeam);
+    applyRosterToForm('red', set1.redTeam);
+    updatePlayerSelectOptions();
+    return;
+  }
+  alert('불러올 이전 로스터가 없습니다.');
+}
+function applyRosterToForm(side, team) {
+  const block = document.querySelector(`.team-block.${side}`);
+  const byLane = new Map(team.map((p) => [p.lane, p]));
+  block.querySelectorAll('.lane-row').forEach((row) => {
+    const entry = byLane.get(row.dataset.lane);
+    if (entry) row.querySelector('.player-select').value = entry.playerId;
+  });
 }
 
 function laneMapFromParticipants(team) {
@@ -541,7 +572,7 @@ function renderTeamInputs(side, allowedPlayers, laneDefaults, options = {}) {
       <div class="lane-row" draggable="true" data-lane="${lane}">
         <span class="drag-handle" title="드래그해서 라인 교체">⠿</span>
         <span class="lane-icon">${laneIconImg(lane)}</span>
-        <select class="player-select">
+        <select class="player-select" required>
           <option value="">선수 선택</option>${playerOptionsHtml(defaultPlayerId)}
         </select>
         <button type="button" class="champion-slot" data-champion-id="${defaultChampionId || ''}">
@@ -698,6 +729,15 @@ document.getElementById('activeSeries').addEventListener('click', async (e) => {
   if (editBtn) {
     state.editingSetId = Number(editBtn.dataset.setId);
     await renderActiveSeries();
+    return;
+  }
+  const deleteGameBtn = e.target.closest('.delete-game-btn');
+  if (deleteGameBtn) {
+    if (!confirm(`Game ${deleteGameBtn.closest('.game-card').querySelector('.game-card-header span').textContent.replace('Game ', '')}을(를) 삭제할까요?`)) return;
+    state.activeSeries = await api(`/api/series/${deleteGameBtn.dataset.seriesId}/sets/${deleteGameBtn.dataset.setId}`, { method: 'DELETE' });
+    state.editingSetId = null;
+    await renderActiveSeries();
+    await loadSeriesList();
   }
 });
 
@@ -780,18 +820,21 @@ function renderSeriesCard(s) {
           <button type="button" class="delete-series-btn" data-id="${s.id}">삭제</button>
         </div>
       </div>
-      ${s.sets.map((set) => renderGameCard(set)).join('') || '<p class="muted series-empty">아직 기록된 세트가 없습니다.</p>'}
+      ${s.sets.map((set) => renderGameCard(set, s.id, set.setNumber === s.sets.length)).join('') || '<p class="muted series-empty">아직 기록된 세트가 없습니다.</p>'}
     </div>
   `;
 }
 
-function renderGameCard(set) {
+function renderGameCard(set, seriesId, isLast) {
   const redWon = set.winnerRoster === set.redRoster;
   return `
     <div class="game-card">
       <div class="game-card-header">
         <span>Game ${set.setNumber}</span>
-        <button type="button" class="edit-game-btn" data-set-id="${set.id}">수정</button>
+        <div class="game-card-actions">
+          <button type="button" class="edit-game-btn" data-set-id="${set.id}">수정</button>
+          ${isLast ? `<button type="button" class="delete-game-btn" data-set-id="${set.id}" data-series-id="${seriesId}">삭제</button>` : ''}
+        </div>
       </div>
       <div class="game-teams">
         ${renderGameTeamColumn('blue', set.blueTeam, set.bans.blue, !redWon)}
@@ -836,16 +879,30 @@ async function loadSeriesList() {
   renderSeriesList();
 }
 
+// 하루에 여러 내전이 있을 수 있어서(요구사항) 날짜가 바뀔 때마다 헤더를 끼워 넣어 묶어줌.
+// state.seriesSummaries는 백엔드에서 이미 날짜 내림차순으로 오므로 그냥 순회하며 이전 항목과 날짜만 비교하면 됨.
 function renderSeriesList() {
   const el = document.getElementById('seriesList');
-  el.innerHTML = state.seriesSummaries.map((s) => `
+  if (!state.seriesSummaries.length) {
+    el.innerHTML = '<li class="muted">기록된 시리즈가 없습니다.</li>';
+    return;
+  }
+  let lastDate = null;
+  const rows = state.seriesSummaries.map((s) => {
+    const dateHeading = s.matchDate !== lastDate
+      ? `<li class="series-date-heading">${s.matchDate}</li>`
+      : '';
+    lastDate = s.matchDate;
+    return `${dateHeading}
     <li class="series-list-item">
       <button class="series-link" data-id="${s.id}" data-status="${s.status}">
-        <span>${s.matchDate} · ${s.format.toUpperCase()} · ${s.status === 'completed' ? `종료(로스터 ${s.winnerRoster} 승)` : '진행중'}</span>
+        <span>${s.format.toUpperCase()} · ${s.status === 'completed' ? `종료(로스터 ${s.winnerRoster} 승)` : '진행중'}</span>
         <span class="series-link-chevron">${state.expandedSeriesId === s.id ? '▲' : '▼'}</span>
       </button>
       <div class="series-expand">${state.expandedSeriesId === s.id && state.expandedSeriesData ? renderSeriesCard(state.expandedSeriesData) : ''}</div>
-    </li>`).join('') || '<li class="muted">기록된 시리즈가 없습니다.</li>';
+    </li>`;
+  });
+  el.innerHTML = rows.join('');
 }
 
 document.getElementById('seriesList').addEventListener('click', async (e) => {
@@ -889,6 +946,14 @@ document.getElementById('seriesList').addEventListener('click', async (e) => {
     state.editingSetId = Number(editBtn.dataset.setId);
     await renderActiveSeries();
     document.getElementById('activeSeries').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    return;
+  }
+
+  const deleteGameBtn = e.target.closest('.delete-game-btn');
+  if (deleteGameBtn) {
+    if (!confirm(`Game ${deleteGameBtn.closest('.game-card').querySelector('.game-card-header span').textContent.replace('Game ', '')}을(를) 삭제할까요?`)) return;
+    state.expandedSeriesData = await api(`/api/series/${deleteGameBtn.dataset.seriesId}/sets/${deleteGameBtn.dataset.setId}`, { method: 'DELETE' });
+    await loadSeriesList();
   }
 });
 

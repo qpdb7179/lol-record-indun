@@ -43,6 +43,34 @@ router.delete('/:id', (req, res) => {
   res.status(204).end();
 });
 
+// 세트를 잘못 만들었을 때 시리즈 전체를 지우지 않고 되돌릴 수 있게 함 — 단, 구조적 안전을 위해
+// "가장 마지막 세트"만 삭제 가능(중간 세트를 지우면 이후 세트들과의 피어리스/진영 스왑 정합성이 깨짐).
+// 세트1(=유일한 세트)을 지우는 경우엔 그 세트가 확정한 로스터 정체성(series_rosters)도 함께 초기화해서
+// 시리즈를 완전히 빈 상태로 되돌림(시리즈 자체는 남겨서 날짜/포맷은 유지).
+router.delete('/:id/sets/:setId', (req, res) => {
+  const series = db.prepare('SELECT * FROM series WHERE id = ?').get(req.params.id);
+  if (!series) return res.status(404).json({ error: '시리즈를 찾을 수 없습니다' });
+
+  const targetSet = db.prepare('SELECT * FROM sets WHERE id = ? AND series_id = ?').get(req.params.setId, series.id);
+  if (!targetSet) return res.status(404).json({ error: '세트를 찾을 수 없습니다' });
+
+  const maxSetNumber = db.prepare('SELECT MAX(set_number) AS n FROM sets WHERE series_id = ?').get(series.id).n;
+  if (targetSet.set_number !== maxSetNumber) {
+    return res.status(400).json({ error: '마지막 세트만 삭제할 수 있습니다. 이후 세트를 먼저 삭제해주세요.' });
+  }
+
+  const runInTransaction = db.transaction(() => {
+    db.prepare('DELETE FROM sets WHERE id = ?').run(targetSet.id); // 참가자/밴은 ON DELETE CASCADE
+    if (targetSet.set_number === 1) {
+      db.prepare('DELETE FROM series_rosters WHERE series_id = ?').run(series.id);
+    }
+    recomputeSeriesStatus(series.id, series.format);
+  });
+  runInTransaction();
+
+  res.json(serializeSeriesDetail(db.prepare('SELECT * FROM series WHERE id = ?').get(series.id)));
+});
+
 router.post('/:id/sets', (req, res) => {
   const series = db.prepare('SELECT * FROM series WHERE id = ?').get(req.params.id);
   if (!series) return res.status(404).json({ error: '시리즈를 찾을 수 없습니다' });
