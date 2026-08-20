@@ -1,8 +1,9 @@
 const express = require('express');
 const db = require('../db');
-const { fetchPlayerProfile } = require('../lib/riot');
+const { fetchPlayerProfile, fetchRecentChampionStats, RECENT_GAMES_COUNT } = require('../lib/riot');
 
 const router = express.Router();
+const RECENT_STATS_CACHE_MS = 60 * 60 * 1000; // 1시간 — match-v5 호출량이 커서(프로필당 1+N건) 매번 새로 안 불러옴
 
 router.get('/', (req, res) => {
   const players = db.prepare('SELECT * FROM players ORDER BY riot_game_name COLLATE NOCASE').all();
@@ -86,6 +87,31 @@ router.post('/:id/refresh', async (req, res) => {
   }
 });
 
+// 최근 N경기(match-v5) 챔피언별 전적 — 호출량이 커서 온디맨드(버튼 클릭)로만 조회, 결과는 캐싱.
+router.post('/:id/recent-stats', async (req, res) => {
+  const player = db.prepare('SELECT * FROM players WHERE id = ?').get(req.params.id);
+  if (!player) return res.status(404).json({ error: '참가자를 찾을 수 없습니다' });
+  if (!player.puuid) return res.status(400).json({ error: 'PUUID 정보가 없습니다. 먼저 새로고침해주세요.' });
+
+  const forceRefresh = req.query.force === '1';
+  const cachedAt = player.recent_stats_fetched_at ? new Date(player.recent_stats_fetched_at).getTime() : 0;
+  const isFresh = player.recent_stats_json && Date.now() - cachedAt < RECENT_STATS_CACHE_MS;
+
+  if (!forceRefresh && isFresh) {
+    return res.json({ stats: JSON.parse(player.recent_stats_json), fetchedAt: player.recent_stats_fetched_at, fromCache: true });
+  }
+
+  try {
+    const stats = await fetchRecentChampionStats(player.puuid, RECENT_GAMES_COUNT);
+    const now = new Date().toISOString();
+    db.prepare('UPDATE players SET recent_stats_json = ?, recent_stats_fetched_at = ? WHERE id = ?')
+      .run(JSON.stringify(stats), now, player.id);
+    res.json({ stats, fetchedAt: now, fromCache: false });
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
+});
+
 router.delete('/:id', (req, res) => {
   db.prepare('DELETE FROM players WHERE id = ?').run(req.params.id);
   res.status(204).end();
@@ -109,6 +135,8 @@ function serialize(p) {
     flexWins: p.flex_wins,
     flexLosses: p.flex_losses,
     topChampions: p.top_champions_json ? JSON.parse(p.top_champions_json) : [],
+    recentStats: p.recent_stats_json ? JSON.parse(p.recent_stats_json) : null,
+    recentStatsFetchedAt: p.recent_stats_fetched_at,
     opggUrl: `https://op.gg/lol/summoners/kr/${encodeURIComponent(p.riot_game_name)}-${encodeURIComponent(p.riot_tag_line)}`,
     lastSyncedAt: p.last_synced_at,
   };

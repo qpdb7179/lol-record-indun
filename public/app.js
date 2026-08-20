@@ -120,6 +120,36 @@ function renderRankedQueueCard(label, tier, rank, lp, wins, losses) {
     </div>`;
 }
 
+const RECENT_GAMES_COUNT = 7; // 백엔드 lib/riot.js의 RECENT_GAMES_COUNT와 맞춰서 유지할 것
+
+function formatRelativeTime(iso) {
+  if (!iso) return '';
+  const diffMin = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+  if (diffMin < 1) return '방금';
+  if (diffMin < 60) return `${diffMin}분 전`;
+  const diffHour = Math.round(diffMin / 60);
+  if (diffHour < 24) return `${diffHour}시간 전`;
+  return `${Math.round(diffHour / 24)}일 전`;
+}
+
+function renderRecentStatsTable(stats, fetchedAt) {
+  if (!stats) return '<p class="muted">아직 불러오지 않았습니다. API 호출량이 있어서 버튼을 눌러야 조회됩니다.</p>';
+  return `
+    <p class="recent-stats-summary">${stats.totalGames}전 ${stats.totalWins}승 ${stats.totalLosses}패 · ${formatRelativeTime(fetchedAt)} 기준</p>
+    <table class="recent-stats-table">
+      <thead><tr><th>챔피언</th><th>전적</th><th>승률</th><th>KDA</th></tr></thead>
+      <tbody>
+        ${stats.perChampion.map((c) => `
+          <tr>
+            <td><img class="recent-champ-icon" src="${championImg(c.championId)}" alt="${championLabel(c.championId)}">${championLabel(c.championId)}</td>
+            <td>${c.games}전 ${c.wins}승 ${c.losses}패</td>
+            <td>${c.winRate}%</td>
+            <td>${c.kda === null ? 'Perfect' : `${c.kda}:1`}<br><span class="muted">${c.avgKills}/${c.avgDeaths}/${c.avgAssists}</span></td>
+          </tr>`).join('')}
+      </tbody>
+    </table>`;
+}
+
 function renderPlayerDetailBody(p) {
   return `
     ${renderRankedQueueCard('솔로랭크', p.tier, p.rank, p.leaguePoints, p.wins, p.losses)}
@@ -137,6 +167,13 @@ function renderPlayerDetailBody(p) {
           </div>`).join('') : '<p class="muted">숙련도 정보 없음</p>'}
       </div>
     </div>
+    <div class="recent-stats-card">
+      <div class="ranked-card-header recent-stats-header">
+        <span>최근 ${RECENT_GAMES_COUNT}경기</span>
+        <button type="button" id="recentStatsBtn" data-id="${p.id}">${p.recentStats ? '새로고침' : '불러오기'}</button>
+      </div>
+      <div class="recent-stats-body" id="recentStatsBody">${renderRecentStatsTable(p.recentStats, p.recentStatsFetchedAt)}</div>
+    </div>
     <a class="opgg-btn player-detail-opgg" href="${p.opggUrl}" target="_blank" rel="noopener">op.gg에서 전체 전적 보기</a>
   `;
 }
@@ -150,6 +187,29 @@ function closePlayerDetail() {
   document.getElementById('playerDetailModal').classList.add('hidden');
 }
 document.getElementById('closePlayerDetail').addEventListener('click', closePlayerDetail);
+document.getElementById('playerDetailBody').addEventListener('click', async (e) => {
+  const btn = e.target.closest('#recentStatsBtn');
+  if (!btn) return;
+  const id = btn.dataset.id;
+  const isRefresh = btn.textContent === '새로고침';
+  const bodyEl = document.getElementById('recentStatsBody');
+  btn.disabled = true;
+  bodyEl.innerHTML = '<p class="muted">불러오는 중... (최근 경기를 하나씩 조회하고 있어요)</p>';
+  try {
+    const result = await api(`/api/players/${id}/recent-stats${isRefresh ? '?force=1' : ''}`, { method: 'POST' });
+    bodyEl.innerHTML = renderRecentStatsTable(result.stats, result.fetchedAt);
+    btn.textContent = '새로고침';
+    const player = state.players.find((p) => String(p.id) === id);
+    if (player) {
+      player.recentStats = result.stats;
+      player.recentStatsFetchedAt = result.fetchedAt;
+    }
+  } catch (err) {
+    bodyEl.innerHTML = `<p class="error">${err.message}</p>`;
+  } finally {
+    btn.disabled = false;
+  }
+});
 document.getElementById('playerDetailModal').addEventListener('click', (e) => {
   if (e.target.id === 'playerDetailModal') closePlayerDetail();
 });

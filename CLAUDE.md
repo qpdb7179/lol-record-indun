@@ -33,6 +33,7 @@ npm start
 - `lib/dataDragon.js` — Riot Data Dragon(`ddragon.leagueoflegends.com`)에서 최신 패치의 챔피언 목록(한글명+이미지 URL)을 가져와 6시간 캐싱. API 키 불필요.
 - `lib/fearless.js` — `getUsedChampionIds(seriesId, beforeSetNumber)`: 같은 시리즈의 이전 세트들에서 밴/픽으로 쓰인 챔피언 id 집합을 반환. 피어리스 드래프트(이번 시즌 LCK 방식 — 한 시리즈 내에서 이미 쓴 챔피언은 이후 세트에서 밴/픽 불가) 검증에 사용.
 - `routes/players.js` — 참가자 등록(Riot API 조회 후 upsert)/목록/새로고침/삭제. `displayName`(실명/닉네임, 선택)은 Riot 데이터와 무관하게 사용자가 직접 입력해 저장. op.gg 링크는 `https://op.gg/lol/summoners/kr/{gameName}-{tagLine}` 형태로 생성만 하고 스크래핑은 하지 않음(ToS 이슈 회피).
+  - `POST /:id/recent-stats` — match-v5 기반 최근 `RECENT_GAMES_COUNT`(7)경기 챔피언별 전적. **온디맨드 전용**(참가자 목록/등록 시 자동 호출 안 함) — 프로필 1개당 API 호출이 1(목록)+N(상세)건이라 비쌈(아래 상태 로그의 레이트리밋 실측 참고). `players.recent_stats_json`/`recent_stats_fetched_at`에 결과를 캐싱하고 **1시간**(`RECENT_STATS_CACHE_MS`) 이내 재요청은 캐시 반환, `?force=1`이면 캐시 무시하고 강제 재조회.
 - `routes/series.js` — 시리즈(Bo3/Bo5) 생성 및 세트 기록의 핵심 로직:
   - **로스터 A/B 개념**: 시리즈 내 두 팀은 색(블루/레드)이 세트마다 바뀌므로, 1세트에서 블루였던 5명을 로스터 A, 레드였던 5명을 로스터 B로 `series_rosters`에 고정 저장. 이후 세트는 제출된 10명이 정확히 로스터 A/B와 일치해야 하며, 직전 세트와 같은 진영(블루 로스터)이면 400 에러(매 세트 진영 스왑 강제).
   - **피어리스 검증**: `lib/fearless.js`로 이전 세트 사용 챔피언 집합을 구해 새 세트의 밴+픽 전체와 교집합 있으면 400.
@@ -100,3 +101,10 @@ npm start
   2. 참가자 카드의 숙련도 미리보기를 없애고, 카드를 클릭하면 op.gg 위젯 스타일의 상세 모달(솔로/자유랭크 카드+숙련도 top3)이 뜨도록 변경. 이를 위해 `lib/riot.js`가 자유랭크와 두 큐의 승/패 수까지 가져오도록 확장, `players` 테이블에 `current_wins/current_losses/flex_tier/flex_rank/flex_lp/flex_wins/flex_losses` 컬럼 추가(기존 배포 DB용 마이그레이션 포함).
   사용자가 op.gg 스크린샷(`/root/ex1.png`~`ex5.png`)을 주면서 "챔피언별 KDA/승률/최근 폼, 포지션 비율, 최근 7일 승률"까지 원했으나, 이건 Riot **match-v5**(매치 기록) API가 별도로 필요해서 범위를 나눠 진행하기로 함(시즌별 티어 히스토리는 애초에 Riot API로 재현 불가 — op.gg 자체 크롤링 데이터라 공식 API엔 없음).
 - **2026-08-20**: match-v5 확장 시 API 호출량을 실제 프로덕션 키로 측정 — `X-App-Rate-Limit` 헤더 확인 결과 이 키는 **여전히 기본 티어(100req/120s, 20req/1s)**임(프로덕션 키는 24시간 만료가 없어지는 것뿐이고, 레이트리밋 상향은 Riot에 별도로 신청해야 하는 것으로 확인됨 — "프로덕션 키 = 무제한"이 아님, 착각하기 쉬운 부분이라 기록해둠). 실측: 매치 ID 목록 1회 + 최근 20경기 상세 20회 = **프로필 1개당 21건**, 순차 호출 시 약 3초 소요, 실제로 앱 레이트리밋 카운트가 22로 정확히 올라가는 것까지 확인. 100/120s 예산 안에서 프로필을 4~5개만 연달아 열어도 다른 기능(참가자 등록/새로고침 등)까지 같이 429를 맞을 수 있다는 뜻 — 만약 나중에 이 기능을 붙인다면 ① 분석 경기 수를 줄이거나(10경기 = 11건) ② 서버에서 결과를 캐싱(예: 1시간)하거나 ③ 자동 조회가 아니라 사용자가 명시적으로 누르는 "최근 전적 불러오기" 버튼으로 온디맨드화하는 것 중 최소 하나는 같이 해야 함. 사용자에게 수치 보고 후 진행 여부는 보류 상태.
+
+- **2026-08-20**: 위 실측 수치를 보고 사용자가 "7경기 + 캐싱 + 온디맨드 버튼"으로 진행 결정. 구현 순서:
+  1. **롤백 안전망 먼저**: 배포 이미지를 `:latest`에서 **커밋 SHA 고정**으로 전환(`k3s-lab/manifests/lol-record-indun/app.yaml`), git tag `stable-pre-match-v5`(`lol-record-indun@3ef77d2`)로 이 시점을 표시. 자세한 롤백 절차는 위 "배포 이미지 태그 & 롤백" 항목 참고.
+  2. `lib/riot.js`에 `getMatchIdsByPuuid`/`getMatchDetail`/`fetchRecentChampionStats`(챔피언별 게임수/승패/KDA 집계) 추가, `RECENT_GAMES_COUNT=7`.
+  3. `routes/players.js`에 `POST /:id/recent-stats`(위 Architecture 참고, 1시간 캐싱).
+  4. 참가자 상세 모달에 "최근 7경기" 카드 + "불러오기"/"새로고침" 버튼(`public/app.js`의 `renderRecentStatsTable`/`RECENT_GAMES_COUNT` — 백엔드 상수와 값이 같아야 하니 바꿀 때 둘 다 고칠 것, 자동 동기화 안 됨).
+  실측: 최초 호출 267ms, 캐시 히트 20ms, 강제 새로고침 220ms. Playwright로 모달 열기→불러오기→7전 3승 4패 테이블(챔피언별 KDA 포함) 렌더 확인 후 새 SHA로 배포.
