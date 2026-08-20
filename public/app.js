@@ -8,6 +8,7 @@ const state = {
   seriesSummaries: [],
   expandedSeriesId: null,
   expandedSeriesData: null,
+  expandedMatchId: null,
 };
 
 async function api(path, opts) {
@@ -148,12 +149,37 @@ function renderChampionAggregateTable(perChampion) {
     </table>`;
 }
 
-function renderRecentMatchList(perGame) {
+function renderScoreRow(p, myRiotId) {
+  const isMe = p.riotId === myRiotId;
+  return `
+    <div class="score-row ${p.win ? 'score-win' : 'score-loss'} ${isMe ? 'score-me' : ''}">
+      <img class="score-champ-icon" src="${championImg(p.championId)}" alt="${championLabel(p.championId)}" title="${championLabel(p.championId)}">
+      <span class="score-riotid">${p.riotId}</span>
+      <span class="score-kda">${p.kills}/${p.deaths}/${p.assists}</span>
+      <span class="score-cs">CS ${p.cs}</span>
+    </div>`;
+}
+
+function renderMatchDetailPanel(g, myRiotId) {
+  return `
+    <div class="match-detail">
+      <div class="match-detail-team">
+        <div class="match-detail-team-label">우리팀</div>
+        ${g.myTeam.map((p) => renderScoreRow(p, myRiotId)).join('')}
+      </div>
+      <div class="match-detail-team">
+        <div class="match-detail-team-label">상대팀</div>
+        ${g.enemyTeam.map((p) => renderScoreRow(p, myRiotId)).join('')}
+      </div>
+    </div>`;
+}
+
+function renderRecentMatchList(perGame, expandedMatchId, myRiotId) {
   if (!perGame || !perGame.length) return '<p class="muted">최근 경기가 없습니다.</p>';
   return `
     <div class="match-list">
       ${perGame.map((g) => `
-        <div class="match-row ${g.win ? 'match-win' : 'match-loss'}">
+        <div class="match-row ${g.win ? 'match-win' : 'match-loss'}" data-match-id="${g.matchId}">
           <img class="match-champ-icon" src="${championImg(g.championId)}" alt="${championLabel(g.championId)}">
           <div class="match-main">
             <div class="match-line1">
@@ -168,20 +194,21 @@ function renderRecentMatchList(perGame) {
               <span class="match-duration">${Math.round(g.gameDurationSec / 60)}분</span>
             </div>
             <div class="match-teams">
-              <span class="match-team-icons">${g.myTeam.map((cid) => `<img src="${championImg(cid)}" alt="${championLabel(cid)}" title="${championLabel(cid)}">`).join('')}</span>
+              <span class="match-team-icons">${g.myTeam.map((p) => `<img src="${championImg(p.championId)}" alt="${championLabel(p.championId)}" title="${championLabel(p.championId)}">`).join('')}</span>
               <span class="match-team-sep">vs</span>
-              <span class="match-team-icons">${g.enemyTeam.map((cid) => `<img src="${championImg(cid)}" alt="${championLabel(cid)}" title="${championLabel(cid)}">`).join('')}</span>
+              <span class="match-team-icons">${g.enemyTeam.map((p) => `<img src="${championImg(p.championId)}" alt="${championLabel(p.championId)}" title="${championLabel(p.championId)}">`).join('')}</span>
             </div>
           </div>
-        </div>`).join('')}
+        </div>
+        ${g.matchId === expandedMatchId ? renderMatchDetailPanel(g, myRiotId) : ''}`).join('')}
     </div>`;
 }
 
-function renderRecentStatsBody(stats, fetchedAt) {
+function renderRecentStatsBody(stats, fetchedAt, myRiotId) {
   if (!stats) return '<p class="muted">아직 불러오지 않았습니다. API 호출량이 있어서 버튼을 눌러야 조회됩니다.</p>';
   return `
-    <p class="recent-stats-summary">${stats.totalGames}전 ${stats.totalWins}승 ${stats.totalLosses}패 · ${formatRelativeTime(fetchedAt)} 기준</p>
-    ${renderRecentMatchList(stats.perGame)}
+    <p class="recent-stats-summary">${stats.totalGames}전 ${stats.totalWins}승 ${stats.totalLosses}패 · ${formatRelativeTime(fetchedAt)} 기준 · 경기를 클릭하면 전체 스코어보드가 열려요</p>
+    ${renderRecentMatchList(stats.perGame, state.expandedMatchId, myRiotId)}
     <details class="recent-stats-aggregate">
       <summary>챔피언별 요약</summary>
       ${renderChampionAggregateTable(stats.perChampion)}
@@ -210,13 +237,14 @@ function renderPlayerDetailBody(p) {
         <span>최근 ${RECENT_GAMES_COUNT}경기</span>
         <button type="button" id="recentStatsBtn" data-id="${p.id}">${p.recentStats ? '새로고침' : '불러오기'}</button>
       </div>
-      <div class="recent-stats-body" id="recentStatsBody">${renderRecentStatsBody(p.recentStats, p.recentStatsFetchedAt)}</div>
+      <div class="recent-stats-body" id="recentStatsBody">${renderRecentStatsBody(p.recentStats, p.recentStatsFetchedAt, p.riotId)}</div>
     </div>
     <a class="opgg-btn player-detail-opgg" href="${p.opggUrl}" target="_blank" rel="noopener">op.gg에서 전체 전적 보기</a>
   `;
 }
 
 function openPlayerDetail(player) {
+  state.expandedMatchId = null;
   document.getElementById('playerDetailTitle').textContent = playerDisplay(player);
   document.getElementById('playerDetailBody').innerHTML = renderPlayerDetailBody(player);
   document.getElementById('playerDetailModal').classList.remove('hidden');
@@ -226,18 +254,31 @@ function closePlayerDetail() {
 }
 document.getElementById('closePlayerDetail').addEventListener('click', closePlayerDetail);
 document.getElementById('playerDetailBody').addEventListener('click', async (e) => {
+  const matchRow = e.target.closest('.match-row');
+  if (matchRow) {
+    const matchId = matchRow.dataset.matchId;
+    state.expandedMatchId = state.expandedMatchId === matchId ? null : matchId;
+    const btn = document.getElementById('recentStatsBtn');
+    const player = state.players.find((p) => String(p.id) === btn.dataset.id);
+    if (player) {
+      document.getElementById('recentStatsBody').innerHTML = renderRecentStatsBody(player.recentStats, player.recentStatsFetchedAt, player.riotId);
+    }
+    return;
+  }
+
   const btn = e.target.closest('#recentStatsBtn');
   if (!btn) return;
   const id = btn.dataset.id;
   const isRefresh = btn.textContent === '새로고침';
   const bodyEl = document.getElementById('recentStatsBody');
+  const player = state.players.find((p) => String(p.id) === id);
   btn.disabled = true;
+  state.expandedMatchId = null;
   bodyEl.innerHTML = '<p class="muted">불러오는 중... (최근 경기를 하나씩 조회하고 있어요)</p>';
   try {
     const result = await api(`/api/players/${id}/recent-stats${isRefresh ? '?force=1' : ''}`, { method: 'POST' });
-    bodyEl.innerHTML = renderRecentStatsBody(result.stats, result.fetchedAt);
+    bodyEl.innerHTML = renderRecentStatsBody(result.stats, result.fetchedAt, player ? player.riotId : null);
     btn.textContent = '새로고침';
-    const player = state.players.find((p) => String(p.id) === id);
     if (player) {
       player.recentStats = result.stats;
       player.recentStatsFetchedAt = result.fetchedAt;

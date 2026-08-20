@@ -153,7 +153,8 @@ tbody tr:hover { background: var(--input-bg); }
 .recent-stats-aggregate summary:hover { color: var(--text); }
 
 .match-list { display: flex; flex-direction: column; gap: 6px; }
-.match-row { display: flex; gap: 10px; padding: 8px 10px; border-radius: 6px; border-left: 3px solid transparent; background: var(--input-bg); }
+.match-row { display: flex; gap: 10px; padding: 8px 10px; border-radius: 6px; border-left: 3px solid transparent; background: var(--input-bg); cursor: pointer; }
+.match-row:hover { background: var(--border); }
 .match-row.match-win { border-left-color: var(--color-blue); }
 .match-row.match-loss { border-left-color: var(--color-red); }
 .match-champ-icon { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
@@ -171,6 +172,19 @@ tbody tr:hover { background: var(--input-bg); }
 .match-team-icons { display: flex; gap: 2px; }
 .match-team-icons img { width: 16px; height: 16px; border-radius: 50%; object-fit: cover; }
 .match-team-sep { font-size: 10px; color: var(--muted); }
+
+.match-detail { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 8px 6px 8px 16px; margin-top: -2px; }
+.match-detail-team-label { font-size: 11px; color: var(--muted); margin-bottom: 4px; }
+.score-row { display: flex; align-items: center; gap: 6px; padding: 3px 4px; border-radius: 4px; font-size: 11px; }
+.score-row.score-me { background: rgba(77, 130, 243, 0.15); font-weight: 700; }
+.score-champ-icon { width: 20px; height: 20px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
+.score-riotid { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.score-kda, .score-cs { color: var(--muted); flex-shrink: 0; }
+.score-row.score-me .score-kda, .score-row.score-me .score-cs { color: var(--text); }
+
+@media (max-width: 480px) {
+  .match-detail { grid-template-columns: 1fr; }
+}
 
 /* ---- 시리즈/게임 카드 ---- */
 .series-card { background: var(--card-bg); color: var(--text); border: 1px solid var(--accent-gold); border-radius: 10px; padding: 16px; margin: 16px 0; }
