@@ -56,7 +56,9 @@ main { max-width: 1000px; margin: 24px 0 24px 24px; padding: 0 16px 48px; }
 .muted { color: var(--muted); }
 .error { color: var(--color-red-text); min-height: 1.2em; }
 
-h3 { color: var(--text); font-family: var(--font-display); font-weight: 400; letter-spacing: 0.5px; }
+/* font-display는 h1(22px, 한 곳)에서만 씀 — "플레이어"의 "플"처럼 획이 밀집된 음절이
+   본문 크기(18px 안팎)에서 뭉개지는 걸 확인해서, 나머지 제목은 기본 폰트로 굵기/자간만 살짝 줌. */
+h3 { color: var(--text); font-weight: 700; letter-spacing: 0.2px; }
 
 #playerForm { display: flex; gap: 8px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
 #displayNameInput { min-width: 220px; }
@@ -152,7 +154,39 @@ select option { background: var(--input-bg); color: var(--text); }
 #noBanBtn { font-size: 12px; }
 #noBanBtn.hidden { display: none; }
 
-.winner-pick { display: flex; gap: 16px; margin: 12px 0; }
+/* 팀 컬럼(.team-columns)과 폭을 맞춰서 바로 위 블루/레드팀 카드와 나란히 이어지는 느낌을 줌 */
+.winner-pick { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 20px 0; }
+@media (max-width: 640px) { .winner-pick { grid-template-columns: 1fr; } }
+.winner-option {
+  position: relative; display: flex; align-items: center; justify-content: center; gap: 10px;
+  padding: 18px; border-radius: 10px; cursor: pointer; text-align: center;
+  border: 2px solid var(--border-strong); background: var(--card-bg-2);
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s, color 0.15s;
+}
+/* width/height:0 + opacity:0로 숨기면 Chromium이 체크된 상태의 네이티브 라디오 표시를 여전히
+   최소 크기로 그려서 옆 글자를 가리는 문제가 있었음 — 표준 sr-only 패턴으로 교체. */
+.winner-option input {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0;
+  appearance: none; -webkit-appearance: none;
+}
+/* font-display(Black Han Sans)는 두꺼운 포스터체라 "블" 같이 획이 밀집된 음절은 작은 크기에서
+   뭉개져 잘 안 보임(60px에선 멀쩡한데 17px에선 뭉개지는 걸 실제로 확인) — 여기선 기본 폰트 유지. */
+.winner-option-label { font-weight: 700; font-size: 16px; letter-spacing: 0.5px; color: var(--muted); }
+.winner-blue:hover { border-color: var(--color-blue); }
+.winner-blue:hover .winner-option-label { color: var(--color-blue-text); }
+.winner-red:hover { border-color: var(--color-red); }
+.winner-red:hover .winner-option-label { color: var(--color-red-text); }
+.winner-blue:has(input:checked) {
+  background: linear-gradient(135deg, rgba(77,130,243,0.3), rgba(77,130,243,0.06));
+  border-color: var(--color-blue); box-shadow: 0 0 0 1px var(--color-blue), 0 0 24px rgba(77,130,243,0.35);
+}
+.winner-blue:has(input:checked) .winner-option-label { color: #fff; }
+.winner-red:has(input:checked) {
+  background: linear-gradient(135deg, rgba(224,90,90,0.3), rgba(224,90,90,0.06));
+  border-color: var(--color-red); box-shadow: 0 0 0 1px var(--color-red), 0 0 24px rgba(224,90,90,0.35);
+}
+.winner-red:has(input:checked) .winner-option-label { color: #fff; }
 .edit-actions { display: flex; gap: 8px; }
 .cancel-edit-btn { color: var(--muted); }
 

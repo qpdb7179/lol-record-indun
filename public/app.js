@@ -584,10 +584,7 @@ async function renderActiveSeries() {
         ${renderTeamInputs('blue', bluePlayers, blueDefaults)}
         ${renderTeamInputs('red', redPlayers, redDefaults)}
       </div>
-      <div class="winner-pick">
-        <label><input type="radio" name="winner" value="blue" required> 블루 승리</label>
-        <label><input type="radio" name="winner" value="red"> 레드 승리</label>
-      </div>
+      ${renderWinnerPick(null)}
       <p class="error" id="setFormError"></p>
       <button type="submit">세트 기록 저장</button>
     </form>
@@ -627,6 +624,24 @@ function applyRosterToForm(side, team) {
 
 function laneMapFromParticipants(team) {
   return new Map(team.map((p) => [p.lane, p]));
+}
+
+// 라디오 버튼 두 줄이 너무 허전해보인다는 피드백으로, 위 팀 컬럼과 나란한 폭의 큼직한 카드형
+// 버튼으로 바꿈. 실제 선택 상태는 여전히 숨겨진 네이티브 radio가 들고 있고(폼 제출/필수 검증 그대로),
+// 카드 자체는 그 radio를 감싸는 <label>이라 카드 클릭이 곧 라디오 선택 — CSS `:has(:checked)`로
+// 선택된 쪽만 진하게 강조.
+function renderWinnerPick(checkedValue) {
+  return `
+    <div class="winner-pick">
+      <label class="winner-option winner-blue">
+        <input type="radio" name="winner" value="blue" required ${checkedValue === 'blue' ? 'checked' : ''}>
+        <span class="winner-option-label">블루팀 승리</span>
+      </label>
+      <label class="winner-option winner-red">
+        <input type="radio" name="winner" value="red" ${checkedValue === 'red' ? 'checked' : ''}>
+        <span class="winner-option-label">레드팀 승리</span>
+      </label>
+    </div>`;
 }
 
 function renderTeamInputs(side, allowedPlayers, laneDefaults, options = {}) {
@@ -1021,10 +1036,7 @@ function renderSetEditForm(seriesId, editingSet) {
         ${renderTeamInputs('blue', editingSet.blueTeam, laneMapFromParticipants(editingSet.blueTeam), { includeChampionDefaults: true, banDefaults: editingSet.bans.blue, lockedLabel: '(선수 구성 고정)' })}
         ${renderTeamInputs('red', editingSet.redTeam, laneMapFromParticipants(editingSet.redTeam), { includeChampionDefaults: true, banDefaults: editingSet.bans.red, lockedLabel: '(선수 구성 고정)' })}
       </div>
-      <div class="winner-pick">
-        <label><input type="radio" name="winner" value="blue" ${editingSet.winnerRoster === editingSet.blueRoster ? 'checked' : ''}> 블루 승리</label>
-        <label><input type="radio" name="winner" value="red" ${editingSet.winnerRoster === editingSet.redRoster ? 'checked' : ''}> 레드 승리</label>
-      </div>
+      ${renderWinnerPick(editingSet.winnerRoster === editingSet.blueRoster ? 'blue' : 'red')}
       <p class="error"></p>
       <div class="edit-actions">
         <button type="submit">수정 저장</button>
