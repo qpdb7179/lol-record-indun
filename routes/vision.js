@@ -46,11 +46,11 @@ function toLaneOrNull(v) {
 }
 
 router.post('/extract-scoreboard', async (req, res) => {
-  const { imageBase64, mediaType } = req.body;
+  const { imageBase64, mediaType, banZoomBase64 } = req.body;
   if (!imageBase64) return res.status(400).json({ error: '이미지가 필요합니다' });
 
   try {
-    const { players: raw, blueBans, redBans } = await extractScoreboard(imageBase64, mediaType);
+    const { players: raw, blueBans, redBans } = await extractScoreboard(imageBase64, mediaType, banZoomBase64);
     const champions = await getChampionList();
     const players = db.prepare('SELECT id, riot_game_name, display_name FROM players').all();
 

@@ -1012,6 +1012,34 @@ function fileToBase64(file) {
   });
 }
 
+function loadImageFromFile(file) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error('이미지를 불러오지 못했습니다'));
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+// 밴 챔피언 인식 정확도가 픽보다 낮아서(초상화가 더 작고 사선까지 겹침) 원본 스크린샷 오른쪽의
+// 밴 패널만 크롭+확대한 이미지를 하나 더 만들어 같이 보냄 — 실측으로 5개 중 2개 맞던 게 4~5개
+// 맞는 수준으로 크게 개선됨(캡션 없이 원본만 줬을 때보다). 밴 패널이 화면마다 정확히 같은 좌표에
+// 있진 않아서 넉넉하게 오른쪽 22%(전체 높이)를 잘라 위(1번팀)/아래(2번팀) 밴이 항상 다 들어오게 함.
+async function cropBanZoomBase64(file) {
+  const img = await loadImageFromFile(file);
+  const sx = Math.round(img.naturalWidth * 0.78);
+  const sw = img.naturalWidth - sx;
+  const sh = img.naturalHeight;
+  const scale = 3;
+  const canvas = document.createElement('canvas');
+  canvas.width = sw * scale;
+  canvas.height = sh * scale;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(img, sx, 0, sw, sh, 0, 0, canvas.width, canvas.height);
+  URL.revokeObjectURL(img.src);
+  return canvas.toDataURL('image/png').split(',')[1];
+}
+
 async function handleScoreboardUpload(input) {
   const file = input.files[0];
   if (!file) return;
@@ -1022,9 +1050,11 @@ async function handleScoreboardUpload(input) {
   statusEl.textContent = '분석 중... (몇 초 걸릴 수 있어요)';
   try {
     const imageBase64 = await fileToBase64(file);
+    // 크롭이 실패해도(예: 브라우저 canvas 제약) 밴 정확도만 못 올릴 뿐 전체 인식은 계속 되게 best-effort로 처리
+    const banZoomBase64 = await cropBanZoomBase64(file).catch(() => null);
     const result = await api('/api/vision/extract-scoreboard', {
       method: 'POST',
-      body: JSON.stringify({ imageBase64, mediaType: file.type || 'image/png' }),
+      body: JSON.stringify({ imageBase64, banZoomBase64, mediaType: file.type || 'image/png' }),
     });
     applyExtractionToForm(form, result.players);
     applyExtractionToBans(form, result.bans);
