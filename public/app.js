@@ -265,6 +265,10 @@ function renderRecentStatsBody(stats, fetchedAt, myRiotId) {
 
 function renderPlayerDetailBody(p) {
   return `
+    <div class="ranked-card-header recent-stats-header">
+      <span>${p.lastSyncedAt ? `티어/숙련도 ${formatRelativeTime(p.lastSyncedAt)} 기준` : '티어 정보 없음'}</span>
+      <button type="button" id="refreshTierBtn" data-id="${p.id}">새로고침</button>
+    </div>
     ${renderRankedQueueCard('솔로랭크', p.tier, p.rank, p.leaguePoints, p.wins, p.losses, 'solo', p.id, p.soloQueueStats, p.soloQueueStatsFetchedAt, state.soloQueueOpen)}
     ${renderRankedQueueCard('자유랭크', p.flexTier, p.flexRank, p.flexLeaguePoints, p.flexWins, p.flexLosses, 'flex', p.id, p.flexQueueStats, p.flexQueueStatsFetchedAt, state.flexQueueOpen)}
     <div class="mastery-card">
@@ -304,6 +308,26 @@ function closePlayerDetail() {
 }
 document.getElementById('closePlayerDetail').addEventListener('click', closePlayerDetail);
 document.getElementById('playerDetailBody').addEventListener('click', async (e) => {
+  const tierBtn = e.target.closest('#refreshTierBtn');
+  if (tierBtn) {
+    const id = tierBtn.dataset.id;
+    tierBtn.disabled = true;
+    tierBtn.textContent = '새로고침 중...';
+    try {
+      const updated = await api(`/api/players/${id}/refresh`, { method: 'POST' });
+      const idx = state.players.findIndex((p) => String(p.id) === id);
+      if (idx !== -1) state.players[idx] = updated;
+      document.getElementById('playerDetailTitle').textContent = playerDisplay(updated);
+      document.getElementById('playerDetailBody').innerHTML = renderPlayerDetailBody(updated);
+      renderPlayers();
+    } catch (err) {
+      alert(err.message);
+      tierBtn.disabled = false;
+      tierBtn.textContent = '새로고침';
+    }
+    return;
+  }
+
   const queueToggle = e.target.closest('.ranked-card-toggle');
   if (queueToggle) {
     const queueKey = queueToggle.dataset.queue;
