@@ -14,11 +14,11 @@ const state = {
   playerSearchQuery: '',
   editingPlayerId: null,
   detailPlayerId: null,
-  detailSimpleMode: false,
   statsChampionsAll: [],
   statsChampionsByLane: {},
   statsLane: 'all',
   statsChampionExpanded: false,
+  statsPlayersById: new Map(),
 };
 
 async function api(path, opts) {
@@ -329,20 +329,18 @@ function renderInternalHistorySection(p) {
     </div>`;
 }
 
-// 통계 탭(플레이어 통계 행 클릭)에서 열 땐 이 사이트 자체 내전 기록이 관심사라, Riot 솔로/자유랭크·
-// 최근 10경기 섹션은 굳이 필요 없다는 피드백으로 "단순 모드" 추가. 참가자 관리 카드에서 열 때는
-// 기존처럼 전부 보여줌(state.detailSimpleMode로 구분, 티어 새로고침 행/숙련도/op.gg는 두 모드 공통).
+// 참가자 관리 카드에서 여는 원래 상세(Riot 솔로/자유랭크·숙련도·최근 10경기 등) — 통계 탭에서 여는
+// renderPlayerStatsBody()와는 완전히 별개 함수. 둘을 한 함수 안에서 플래그로 나누니 통계 쪽에서 열어도
+// Riot 전용 개념(숙련도 등)이 섞여 보인다는 피드백을 받아서, 아예 내용이 안 겹치는 두 함수로 분리함.
 function renderPlayerDetailBody(p) {
   if (state.editingPlayerId === p.id) return renderPlayerEditForm(p);
-  const simple = state.detailSimpleMode;
   return `
-    ${renderInternalHistorySection(p)}
     <div class="ranked-card-header recent-stats-header">
       <span>${p.lastSyncedAt ? `티어/숙련도 ${formatRelativeTime(p.lastSyncedAt)} 기준` : '티어 정보 없음'}</span>
       <button type="button" id="refreshTierBtn" data-id="${p.id}">새로고침</button>
     </div>
-    ${simple ? '' : renderRankedQueueCard('솔로랭크', p.tier, p.rank, p.leaguePoints, p.wins, p.losses, 'solo', p.id, p.soloQueueStats, p.soloQueueStatsFetchedAt, state.soloQueueOpen)}
-    ${simple ? '' : renderRankedQueueCard('자유랭크', p.flexTier, p.flexRank, p.flexLeaguePoints, p.flexWins, p.flexLosses, 'flex', p.id, p.flexQueueStats, p.flexQueueStatsFetchedAt, state.flexQueueOpen)}
+    ${renderRankedQueueCard('솔로랭크', p.tier, p.rank, p.leaguePoints, p.wins, p.losses, 'solo', p.id, p.soloQueueStats, p.soloQueueStatsFetchedAt, state.soloQueueOpen)}
+    ${renderRankedQueueCard('자유랭크', p.flexTier, p.flexRank, p.flexLeaguePoints, p.flexWins, p.flexLosses, 'flex', p.id, p.flexQueueStats, p.flexQueueStatsFetchedAt, state.flexQueueOpen)}
     <div class="mastery-card">
       <div class="ranked-card-header">숙련도 Top 3</div>
       <div class="mastery-list">
@@ -356,27 +354,65 @@ function renderPlayerDetailBody(p) {
           </div>`).join('') : '<p class="muted">숙련도 정보 없음</p>'}
       </div>
     </div>
-    ${simple ? '' : `
     <div class="recent-stats-card">
       <div class="ranked-card-header recent-stats-header">
         <span>최근 ${RECENT_GAMES_COUNT}경기</span>
         <button type="button" id="recentStatsBtn" data-id="${p.id}">${p.recentStats ? '새로고침' : '불러오기'}</button>
       </div>
       <div class="recent-stats-body" id="recentStatsBody">${renderRecentStatsBody(p.recentStats, p.recentStatsFetchedAt, p.riotId)}</div>
-    </div>`}
+    </div>
     <a class="opgg-btn player-detail-opgg" href="${p.opggUrl}" target="_blank" rel="noopener">op.gg에서 전체 전적 보기</a>
   `;
 }
 
-async function openPlayerDetail(player, simple = false) {
+// 통계 탭(플레이어 통계 행 클릭) 전용 — 이 사이트 자체 내전 기록만 다룸(Riot 랭크/숙련도 없음).
+// "내전 최다 챔피언"은 Riot 숙련도(점수)가 아니라 실제 내전 세트 판수/승률 기준(statsInfo.topChampions,
+// GET /api/stats/players에서 이미 계산해둔 값 — .mastery-row 스타일을 그대로 재사용하되 텍스트만 다름).
+function renderPlayerStatsBody(p, statsInfo) {
+  return `
+    ${renderInternalHistorySection(p)}
+    <div class="mastery-card">
+      <div class="ranked-card-header">내전 최다 챔피언</div>
+      <div class="mastery-list">
+        ${statsInfo.topChampions.length ? statsInfo.topChampions.map((c) => `
+          <div class="mastery-row">
+            <img class="mastery-champ-img" src="${championImg(c.championId)}" alt="${championLabel(c.championId)}">
+            <div class="mastery-info">
+              <div class="mastery-champ-name">${championLabel(c.championId)}</div>
+              <div class="mastery-points">${c.games}전 ${c.wins}승 (${c.winRate}%)</div>
+            </div>
+          </div>`).join('') : '<p class="muted">기록된 내전이 없습니다.</p>'}
+      </div>
+    </div>
+  `;
+}
+
+async function openPlayerDetail(player) {
   state.expandedMatchId = null;
   state.soloQueueOpen = false;
   state.flexQueueOpen = false;
   state.editingPlayerId = null;
   state.detailPlayerId = player.id;
-  state.detailSimpleMode = simple;
+  document.getElementById('editPlayerHeaderBtn').classList.remove('hidden');
+  document.getElementById('deletePlayerHeaderBtn').classList.remove('hidden');
   document.getElementById('playerDetailTitle').textContent = playerDisplay(player);
   document.getElementById('playerDetailBody').innerHTML = renderPlayerDetailBody(player);
+  document.getElementById('playerDetailModal').classList.remove('hidden');
+}
+
+// 통계 탭에서만 쓰는 진입점 — 수정/삭제는 참가자 관리 영역 기능이라 여기선 아예 숨김.
+async function openPlayerStatsDetail(playerId) {
+  const player = state.players.find((p) => String(p.id) === String(playerId));
+  const statsInfo = state.statsPlayersById.get(String(playerId));
+  if (!player || !statsInfo) return;
+
+  state.expandedMatchId = null;
+  state.editingPlayerId = null;
+  state.detailPlayerId = player.id;
+  document.getElementById('editPlayerHeaderBtn').classList.add('hidden');
+  document.getElementById('deletePlayerHeaderBtn').classList.add('hidden');
+  document.getElementById('playerDetailTitle').textContent = playerDisplay(player);
+  document.getElementById('playerDetailBody').innerHTML = renderPlayerStatsBody(player, statsInfo);
   document.getElementById('playerDetailModal').classList.remove('hidden');
 
   if (!player.internalHistory) {
@@ -386,7 +422,7 @@ async function openPlayerDetail(player, simple = false) {
       player.internalHistory = [];
     }
     if (state.detailPlayerId === player.id) {
-      document.getElementById('playerDetailBody').innerHTML = renderPlayerDetailBody(player);
+      document.getElementById('playerDetailBody').innerHTML = renderPlayerStatsBody(player, statsInfo);
     }
   }
 }
@@ -1180,6 +1216,7 @@ async function loadStats() {
   state.statsChampionsByLane = championsByLane;
   state.statsLane = 'all';
   state.statsChampionExpanded = false;
+  state.statsPlayersById = new Map(players.map((p) => [String(p.playerId), p]));
   renderChampionStatsSection();
 
   document.getElementById('playerStats').innerHTML = `
@@ -1197,8 +1234,7 @@ async function loadStats() {
 document.getElementById('playerStats').addEventListener('click', (e) => {
   const row = e.target.closest('.stats-player-row');
   if (!row) return;
-  const player = state.players.find((p) => String(p.id) === row.dataset.id);
-  if (player) openPlayerDetail(player, true);
+  openPlayerStatsDetail(row.dataset.id);
 });
 
 // 챔피언 풀이 커서(현재 173종) 표가 한없이 길어지는 걸 막으려고 기본은 상위 N개만 보여주고
