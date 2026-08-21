@@ -14,6 +14,7 @@ const state = {
   playerSearchQuery: '',
   editingPlayerId: null,
   detailPlayerId: null,
+  detailSimpleMode: false,
   statsChampionsAll: [],
   statsChampionsByLane: {},
   statsLane: 'all',
@@ -328,16 +329,20 @@ function renderInternalHistorySection(p) {
     </div>`;
 }
 
+// 통계 탭(플레이어 통계 행 클릭)에서 열 땐 이 사이트 자체 내전 기록이 관심사라, Riot 솔로/자유랭크·
+// 최근 10경기 섹션은 굳이 필요 없다는 피드백으로 "단순 모드" 추가. 참가자 관리 카드에서 열 때는
+// 기존처럼 전부 보여줌(state.detailSimpleMode로 구분, 티어 새로고침 행/숙련도/op.gg는 두 모드 공통).
 function renderPlayerDetailBody(p) {
   if (state.editingPlayerId === p.id) return renderPlayerEditForm(p);
+  const simple = state.detailSimpleMode;
   return `
     ${renderInternalHistorySection(p)}
     <div class="ranked-card-header recent-stats-header">
       <span>${p.lastSyncedAt ? `티어/숙련도 ${formatRelativeTime(p.lastSyncedAt)} 기준` : '티어 정보 없음'}</span>
       <button type="button" id="refreshTierBtn" data-id="${p.id}">새로고침</button>
     </div>
-    ${renderRankedQueueCard('솔로랭크', p.tier, p.rank, p.leaguePoints, p.wins, p.losses, 'solo', p.id, p.soloQueueStats, p.soloQueueStatsFetchedAt, state.soloQueueOpen)}
-    ${renderRankedQueueCard('자유랭크', p.flexTier, p.flexRank, p.flexLeaguePoints, p.flexWins, p.flexLosses, 'flex', p.id, p.flexQueueStats, p.flexQueueStatsFetchedAt, state.flexQueueOpen)}
+    ${simple ? '' : renderRankedQueueCard('솔로랭크', p.tier, p.rank, p.leaguePoints, p.wins, p.losses, 'solo', p.id, p.soloQueueStats, p.soloQueueStatsFetchedAt, state.soloQueueOpen)}
+    ${simple ? '' : renderRankedQueueCard('자유랭크', p.flexTier, p.flexRank, p.flexLeaguePoints, p.flexWins, p.flexLosses, 'flex', p.id, p.flexQueueStats, p.flexQueueStatsFetchedAt, state.flexQueueOpen)}
     <div class="mastery-card">
       <div class="ranked-card-header">숙련도 Top 3</div>
       <div class="mastery-list">
@@ -351,23 +356,25 @@ function renderPlayerDetailBody(p) {
           </div>`).join('') : '<p class="muted">숙련도 정보 없음</p>'}
       </div>
     </div>
+    ${simple ? '' : `
     <div class="recent-stats-card">
       <div class="ranked-card-header recent-stats-header">
         <span>최근 ${RECENT_GAMES_COUNT}경기</span>
         <button type="button" id="recentStatsBtn" data-id="${p.id}">${p.recentStats ? '새로고침' : '불러오기'}</button>
       </div>
       <div class="recent-stats-body" id="recentStatsBody">${renderRecentStatsBody(p.recentStats, p.recentStatsFetchedAt, p.riotId)}</div>
-    </div>
+    </div>`}
     <a class="opgg-btn player-detail-opgg" href="${p.opggUrl}" target="_blank" rel="noopener">op.gg에서 전체 전적 보기</a>
   `;
 }
 
-async function openPlayerDetail(player) {
+async function openPlayerDetail(player, simple = false) {
   state.expandedMatchId = null;
   state.soloQueueOpen = false;
   state.flexQueueOpen = false;
   state.editingPlayerId = null;
   state.detailPlayerId = player.id;
+  state.detailSimpleMode = simple;
   document.getElementById('playerDetailTitle').textContent = playerDisplay(player);
   document.getElementById('playerDetailBody').innerHTML = renderPlayerDetailBody(player);
   document.getElementById('playerDetailModal').classList.remove('hidden');
@@ -1191,7 +1198,7 @@ document.getElementById('playerStats').addEventListener('click', (e) => {
   const row = e.target.closest('.stats-player-row');
   if (!row) return;
   const player = state.players.find((p) => String(p.id) === row.dataset.id);
-  if (player) openPlayerDetail(player);
+  if (player) openPlayerDetail(player, true);
 });
 
 // 챔피언 풀이 커서(현재 173종) 표가 한없이 길어지는 걸 막으려고 기본은 상위 N개만 보여주고
