@@ -207,10 +207,29 @@ tbody tr:hover { background: var(--input-bg); }
 .stats-lane-btn { padding: 5px 14px; font-size: 12px; border-radius: 999px; border: 1px solid var(--border-strong); background: var(--input-bg); color: var(--muted); }
 .stats-lane-btn:hover { color: var(--text); }
 .stats-lane-btn.active { background: linear-gradient(180deg, var(--accent-gold-bright), var(--accent-gold)); color: #1a1206; border-color: var(--accent-gold-bright); font-weight: 700; }
+.stats-more-btn { display: block; margin: -16px auto 24px; font-size: 12px; color: var(--muted); background: var(--input-bg); border: 1px solid var(--border-strong); border-radius: 999px; padding: 5px 16px; }
+.stats-more-btn:hover { color: var(--text); background: var(--border); }
 
-.top-champs { display: flex; gap: 5px; flex-wrap: wrap; }
-.top-champ-chip { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: var(--muted); background: var(--input-bg); border: 1px solid var(--border); border-radius: 999px; padding: 2px 8px 2px 2px; white-space: nowrap; }
-.top-champ-chip img { width: 18px; height: 18px; border-radius: 50%; object-fit: cover; }
+.top-champs { display: flex; gap: 5px; }
+.top-champs img { width: 24px; height: 24px; border-radius: 50%; object-fit: cover; }
+
+.stats-player-row { cursor: pointer; }
+.stats-player-row:hover td { color: var(--text); }
+.stats-player-row td:first-child { color: var(--accent-gold-bright); font-weight: 600; }
+
+.internal-history-card { background: var(--card-bg-2); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; flex-shrink: 0; }
+.internal-history-loading { padding: 10px 12px; margin: 0; }
+.internal-history-list { max-height: 260px; overflow-y: auto; }
+.internal-history-row { display: flex; align-items: center; gap: 8px; padding: 6px 12px; font-size: 12px; border-left: 3px solid transparent; }
+.internal-history-row + .internal-history-row { border-top: 1px solid var(--border); }
+.internal-history-row.win { border-left-color: var(--color-blue); }
+.internal-history-row.loss { border-left-color: var(--color-red); }
+.internal-history-date { color: var(--muted); flex-shrink: 0; }
+.internal-history-game { color: var(--muted); font-size: 11px; flex-shrink: 0; }
+.internal-history-champ { width: 24px; height: 24px; border-radius: 50%; object-fit: cover; margin-left: auto; }
+.internal-history-result { font-weight: 700; width: 18px; text-align: center; flex-shrink: 0; }
+.internal-history-row.win .internal-history-result { color: var(--color-blue-text); }
+.internal-history-row.loss .internal-history-result { color: var(--color-red-text); }
 
 /* ---- 챔피언 피커 모달 ---- */
 .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 100; }

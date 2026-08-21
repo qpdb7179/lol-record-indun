@@ -17,6 +17,7 @@ const state = {
   statsChampionsAll: [],
   statsChampionsByLane: {},
   statsLane: 'all',
+  statsChampionExpanded: false,
 };
 
 async function api(path, opts) {
@@ -300,9 +301,37 @@ function renderRecentStatsBody(stats, fetchedAt, myRiotId) {
     </details>`;
 }
 
+// 이 사이트 자체의 내전 기록(우리 DB) — Riot 랭크/최근전적과 달리 API 호출 비용이 없어서
+// 모달 열 때 바로 불러옴(버튼으로 게이트 안 함). p.internalHistory가 아직 없으면(로딩 전) 안내 문구.
+function renderInternalHistorySection(p) {
+  if (!p.internalHistory) {
+    return `<div class="internal-history-card"><div class="ranked-card-header">내전 전적</div><p class="muted internal-history-loading">불러오는 중...</p></div>`;
+  }
+  const history = p.internalHistory;
+  if (!history.length) {
+    return `<div class="internal-history-card"><div class="ranked-card-header">내전 전적</div><p class="muted internal-history-loading">기록된 내전이 없습니다.</p></div>`;
+  }
+  const wins = history.filter((h) => h.win).length;
+  return `
+    <div class="internal-history-card">
+      <div class="ranked-card-header">내전 전적 (${history.length}전 ${wins}승 ${history.length - wins}패)</div>
+      <div class="internal-history-list">
+        ${history.map((h) => `
+          <div class="internal-history-row ${h.win ? 'win' : 'loss'}">
+            <span class="internal-history-date">${h.matchDate}</span>
+            <span class="internal-history-game">${h.format.toUpperCase()} G${h.setNumber}</span>
+            <img class="internal-history-champ" src="${championImg(h.championId)}" alt="${championLabel(h.championId)}" title="${championLabel(h.championId)}">
+            <span class="lane-icon">${laneIconImg(h.lane)}</span>
+            <span class="internal-history-result">${h.win ? '승' : '패'}</span>
+          </div>`).join('')}
+      </div>
+    </div>`;
+}
+
 function renderPlayerDetailBody(p) {
   if (state.editingPlayerId === p.id) return renderPlayerEditForm(p);
   return `
+    ${renderInternalHistorySection(p)}
     <div class="ranked-card-header recent-stats-header">
       <span>${p.lastSyncedAt ? `티어/숙련도 ${formatRelativeTime(p.lastSyncedAt)} 기준` : '티어 정보 없음'}</span>
       <button type="button" id="refreshTierBtn" data-id="${p.id}">새로고침</button>
@@ -333,7 +362,7 @@ function renderPlayerDetailBody(p) {
   `;
 }
 
-function openPlayerDetail(player) {
+async function openPlayerDetail(player) {
   state.expandedMatchId = null;
   state.soloQueueOpen = false;
   state.flexQueueOpen = false;
@@ -342,6 +371,17 @@ function openPlayerDetail(player) {
   document.getElementById('playerDetailTitle').textContent = playerDisplay(player);
   document.getElementById('playerDetailBody').innerHTML = renderPlayerDetailBody(player);
   document.getElementById('playerDetailModal').classList.remove('hidden');
+
+  if (!player.internalHistory) {
+    try {
+      player.internalHistory = await api(`/api/stats/players/${player.id}/sets`);
+    } catch {
+      player.internalHistory = [];
+    }
+    if (state.detailPlayerId === player.id) {
+      document.getElementById('playerDetailBody').innerHTML = renderPlayerDetailBody(player);
+    }
+  }
 }
 function closePlayerDetail() {
   state.editingPlayerId = null;
@@ -1132,26 +1172,40 @@ async function loadStats() {
   state.statsChampionsAll = championsAll;
   state.statsChampionsByLane = championsByLane;
   state.statsLane = 'all';
+  state.statsChampionExpanded = false;
   renderChampionStatsSection();
 
   document.getElementById('playerStats').innerHTML = `
     <table><thead><tr><th>선수</th><th>경기수</th><th>승수</th><th>승률</th><th>선호 라인</th><th>주력 챔피언</th></tr></thead>
     <tbody>${players.map((p) => `
-      <tr>
+      <tr class="stats-player-row" data-id="${p.playerId}">
         <td>${p.riotId}</td><td>${p.games}</td><td>${p.wins}</td><td>${p.winRate}%</td><td>${p.favoriteLane ? LANE_LABEL[p.favoriteLane] : '-'}</td>
         <td><div class="top-champs">${p.topChampions.length ? p.topChampions.map((c) => `
-          <span class="top-champ-chip" title="${championLabel(c.championId)} ${c.games}전 ${c.wins}승 (${c.winRate}%)">
-            <img src="${championImg(c.championId)}" alt="${championLabel(c.championId)}">${c.games}전
-          </span>`).join('') : '<span class="muted">-</span>'}</div></td>
+          <img src="${championImg(c.championId)}" alt="${championLabel(c.championId)}" title="${championLabel(c.championId)} ${c.games}전 ${c.wins}승 (${c.winRate}%)">
+          `).join('') : '<span class="muted">-</span>'}</div></td>
       </tr>
     `).join('')}</tbody></table>`;
 }
+
+document.getElementById('playerStats').addEventListener('click', (e) => {
+  const row = e.target.closest('.stats-player-row');
+  if (!row) return;
+  const player = state.players.find((p) => String(p.id) === row.dataset.id);
+  if (player) openPlayerDetail(player);
+});
+
+// 챔피언 풀이 커서(현재 173종) 표가 한없이 길어지는 걸 막으려고 기본은 상위 N개만 보여주고
+// "더보기"를 눌러야 전체를 펼침 — 라인 탭을 바꾸면 다시 접어서(펼친 채로 남으면 탭마다 길이가
+// 들쭉날쭉해 보임) 항상 예측 가능하게 함.
+const CHAMPION_STATS_PAGE_SIZE = 10;
 
 // "전체"는 밴 통계를 포함한 전체 표, 특정 라인은 밴이 라인에 귀속되지 않는 개념이라 밴 컬럼을 뺀
 // 별도 표를 씀 — 라인 탭을 눌러도 새로 fetch하지 않고 loadStats에서 미리 받아둔 데이터를 재사용.
 function renderChampionStatsSection() {
   const lane = state.statsLane;
-  const rows = lane === 'all' ? state.statsChampionsAll : state.statsChampionsByLane[lane];
+  const allRows = lane === 'all' ? state.statsChampionsAll : state.statsChampionsByLane[lane];
+  const expanded = state.statsChampionExpanded;
+  const rows = expanded ? allRows : allRows.slice(0, CHAMPION_STATS_PAGE_SIZE);
   const filterHtml = `
     <div class="stats-lane-filter">
       <button type="button" class="stats-lane-btn ${lane === 'all' ? 'active' : ''}" data-lane="all">전체</button>
@@ -1162,12 +1216,23 @@ function renderChampionStatsSection() {
        <tbody>${rows.map((c) => `<tr><td>${champCell(c.championId)}</td><td>${c.picks}</td><td>${c.pickRate}%</td><td>${c.winRate}%</td><td>${c.bans}</td><td>${c.banRate}%</td></tr>`).join('')}</tbody></table>`
     : `<table><thead><tr><th>챔피언</th><th>픽</th><th>픽률</th><th>승률</th></tr></thead>
        <tbody>${rows.map((c) => `<tr><td>${champCell(c.championId)}</td><td>${c.picks}</td><td>${c.pickRate}%</td><td>${c.winRate}%</td></tr>`).join('') || '<tr><td colspan="4" class="muted">이 라인에 기록된 세트가 없습니다.</td></tr>'}</tbody></table>`;
-  document.getElementById('championStats').innerHTML = filterHtml + tableHtml;
+  const moreBtnHtml = allRows.length > CHAMPION_STATS_PAGE_SIZE
+    ? `<button type="button" class="stats-more-btn" id="championStatsMoreBtn">${expanded ? '접기' : `더보기 (${allRows.length - CHAMPION_STATS_PAGE_SIZE}개 더)`}</button>`
+    : '';
+  document.getElementById('championStats').innerHTML = filterHtml + tableHtml + moreBtnHtml;
 }
 
 document.getElementById('championStats').addEventListener('click', (e) => {
-  const btn = e.target.closest('.stats-lane-btn');
-  if (!btn) return;
-  state.statsLane = btn.dataset.lane;
-  renderChampionStatsSection();
+  const laneBtn = e.target.closest('.stats-lane-btn');
+  if (laneBtn) {
+    state.statsLane = laneBtn.dataset.lane;
+    state.statsChampionExpanded = false;
+    renderChampionStatsSection();
+    return;
+  }
+  const moreBtn = e.target.closest('#championStatsMoreBtn');
+  if (moreBtn) {
+    state.statsChampionExpanded = !state.statsChampionExpanded;
+    renderChampionStatsSection();
+  }
 });

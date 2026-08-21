@@ -120,4 +120,29 @@ router.get('/players', (req, res) => {
   res.json(result);
 });
 
+// 특정 선수가 뛴 모든 세트 — 참가자 상세 모달의 "내전 전적" 섹션용. KDA는 이 앱에서 안 쓰므로
+// 세트/라인/챔피언/승패만 반환(최신순).
+router.get('/players/:id/sets', (req, res) => {
+  const rows = db.prepare(`
+    SELECT sp.champion_id AS championId, sp.lane AS lane, sp.team AS team,
+      s.set_number AS setNumber, s.blue_roster AS blueRoster, s.red_roster AS redRoster, s.winner_roster AS winnerRoster,
+      se.id AS seriesId, se.match_date AS matchDate, se.format AS format
+    FROM set_participants sp
+    JOIN sets s ON s.id = sp.set_id
+    JOIN series se ON se.id = s.series_id
+    WHERE sp.player_id = ?
+    ORDER BY se.match_date DESC, se.id DESC, s.set_number DESC
+  `).all(req.params.id);
+
+  res.json(rows.map((r) => ({
+    seriesId: r.seriesId,
+    matchDate: r.matchDate,
+    format: r.format,
+    setNumber: r.setNumber,
+    lane: r.lane,
+    championId: r.championId,
+    win: (r.team === 'blue' && r.blueRoster === r.winnerRoster) || (r.team === 'red' && r.redRoster === r.winnerRoster),
+  })));
+});
+
 module.exports = router;
