@@ -683,6 +683,7 @@ async function renderActiveSeries() {
         ${nextSetNumber}세트 입력
         ${nextSetNumber === 1 ? '<button type="button" id="loadLastRosterBtn" class="load-roster-btn">지난 로스터 불러오기</button>' : ''}
       </h4>
+      ${renderScreenshotUploadRow()}
       <div class="team-columns">
         ${renderTeamInputs('blue', bluePlayers, blueDefaults)}
         ${renderTeamInputs('red', redPlayers, redDefaults)}
@@ -747,6 +748,33 @@ function renderWinnerPick(checkedValue) {
     </div>`;
 }
 
+// K/D/A·CS·골드 입력칸 — 수기 입력 폼에는 이 칸 자체가 없고(renderTeamInputs 참고), 스크린샷으로
+// 채워질 때만 lane-row 끝에 동적으로 추가됨(applyExtractionToRow) or 이미 값이 있는 세트를 수정할
+// 때만 미리 렌더됨. 그래서 항상 값이 있다는 전제 없이 entry가 undefined여도 빈 칸으로 렌더 가능.
+function renderKdaGoldInputs(entry) {
+  return `
+    <span class="kda-gold-inputs">
+      <input type="number" class="kda-input kda-k" min="0" placeholder="K" title="킬" value="${entry?.kills ?? ''}">
+      <input type="number" class="kda-input kda-d" min="0" placeholder="D" title="데스" value="${entry?.deaths ?? ''}">
+      <input type="number" class="kda-input kda-a" min="0" placeholder="A" title="어시스트" value="${entry?.assists ?? ''}">
+      <input type="number" class="kda-input kda-cs" min="0" placeholder="CS" title="CS" value="${entry?.cs ?? ''}">
+      <input type="number" class="kda-input kda-gold" min="0" placeholder="Gold" title="골드" value="${entry?.gold ?? ''}">
+    </span>`;
+}
+
+// 사설 게임은 Riot API로 못 가져오니(match-v5가 커스텀 게임을 지원 안 함) 경기 종료 후 점수판
+// 스크린샷을 비전 모델(Gemini)로 읽어서 폼을 자동으로 채움. 인식 결과는 항상 사람이 저장 전에 확인/수정 가능.
+function renderScreenshotUploadRow() {
+  return `
+    <div class="scoreboard-upload-row">
+      <label class="scoreboard-upload-label">
+        📷 점수판 스크린샷으로 채우기
+        <input type="file" accept="image/*" class="scoreboard-upload-input">
+      </label>
+      <span class="scoreboard-upload-status muted"></span>
+    </div>`;
+}
+
 function renderTeamInputs(side, allowedPlayers, laneDefaults, options = {}) {
   const { includeChampionDefaults = false, banDefaults = [], lockedLabel = '(로스터 고정, 라인은 드래그로 변경 가능)' } = options;
   // state.players 항목은 id, 로스터/세트 참가자 항목은 playerId 필드를 씀 — 여기서 id로 통일
@@ -758,6 +786,10 @@ function renderTeamInputs(side, allowedPlayers, laneDefaults, options = {}) {
     const entry = laneDefaults ? laneDefaults.get(lane) : null;
     const defaultPlayerId = entry ? entry.playerId : '';
     const defaultChampionId = includeChampionDefaults && entry ? entry.championId : null;
+    // K/D/A·CS·골드는 수기 입력엔 칸 자체가 없음 — 이 세트를 수정할 때(includeChampionDefaults=true)
+    // 이전에 스크린샷으로 채워져서 값이 실제로 있는 경우에만 미리 그 칸을 보여줌. 신규 세트 입력이나
+    // "지난 로스터 불러오기"로 채운 선수는 당연히 이전 세트의 스탯을 물려받으면 안 되므로 항상 비어있음.
+    const hasStats = includeChampionDefaults && entry && Number.isInteger(entry.kills);
     return `
       <div class="lane-row" draggable="true" data-lane="${lane}">
         <span class="drag-handle" title="드래그해서 라인 교체">⠿</span>
@@ -768,6 +800,7 @@ function renderTeamInputs(side, allowedPlayers, laneDefaults, options = {}) {
         <button type="button" class="champion-slot" data-champion-id="${defaultChampionId || ''}">
           ${championSlotInnerHtml(defaultChampionId)}
         </button>
+        ${hasStats ? renderKdaGoldInputs(entry) : ''}
       </div>`;
   }).join('');
 
@@ -819,11 +852,31 @@ function attachDragHandlers(container) {
 }
 function getRowState(row) {
   const champBtn = row.querySelector('.champion-slot');
-  return { playerId: row.querySelector('.player-select').value, championId: champBtn.dataset.championId || '' };
+  const kdaGold = row.querySelector('.kda-gold-inputs');
+  return {
+    playerId: row.querySelector('.player-select').value,
+    championId: champBtn.dataset.championId || '',
+    // 라인을 드래그로 맞바꿀 땐 그 선수/챔피언의 스크린샷 통계도 같이 옮겨가야 함(라인 자체가 아니라
+    // 그 자리에 있던 사람의 기록이므로) — kda-gold-inputs가 없는 행(수기 입력)은 null로 둠.
+    kda: kdaGold ? {
+      k: kdaGold.querySelector('.kda-k').value,
+      d: kdaGold.querySelector('.kda-d').value,
+      a: kdaGold.querySelector('.kda-a').value,
+      cs: kdaGold.querySelector('.kda-cs').value,
+      gold: kdaGold.querySelector('.kda-gold').value,
+    } : null,
+  };
 }
 function setRowState(row, rowState) {
   row.querySelector('.player-select').value = rowState.playerId;
   setChampionSlot(row.querySelector('.champion-slot'), rowState.championId ? Number(rowState.championId) : null);
+  const existing = row.querySelector('.kda-gold-inputs');
+  if (existing) existing.remove();
+  if (rowState.kda) {
+    row.insertAdjacentHTML('beforeend', renderKdaGoldInputs({
+      kills: rowState.kda.k, deaths: rowState.kda.d, assists: rowState.kda.a, cs: rowState.kda.cs, gold: rowState.kda.gold,
+    }));
+  }
 }
 function swapRowContents(rowA, rowB) {
   const a = getRowState(rowA);
@@ -947,7 +1000,83 @@ async function startEditingSet(seriesId, setId) {
 
 document.getElementById('activeSeries').addEventListener('change', (e) => {
   if (e.target.classList.contains('player-select')) updatePlayerSelectOptions(document.getElementById('activeSeries'));
+  if (e.target.classList.contains('scoreboard-upload-input')) handleScoreboardUpload(e.target);
 });
+
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result.split(',')[1]);
+    reader.onerror = () => reject(new Error('파일을 읽지 못했습니다'));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function handleScoreboardUpload(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const form = input.closest('form');
+  const statusEl = form.querySelector('.scoreboard-upload-status');
+  input.disabled = true;
+  statusEl.classList.remove('warning');
+  statusEl.textContent = '분석 중... (몇 초 걸릴 수 있어요)';
+  try {
+    const imageBase64 = await fileToBase64(file);
+    const result = await api('/api/vision/extract-scoreboard', {
+      method: 'POST',
+      body: JSON.stringify({ imageBase64, mediaType: file.type || 'image/png' }),
+    });
+    applyExtractionToForm(form, result.players);
+    const warnings = [];
+    if (result.unmatchedPlayers.length) warnings.push(`선수 매칭 실패(${result.unmatchedPlayers.join(', ')})`);
+    if (result.unmatchedChampions.length) warnings.push(`챔피언 매칭 실패(${result.unmatchedChampions.join(', ')})`);
+    statusEl.textContent = warnings.length
+      ? `자동으로 채웠어요. 다만 ${warnings.join(', ')}는 직접 확인해주세요. K/D/A·CS·골드도 저장 전에 한 번 확인해주세요.`
+      : '자동으로 채웠어요. 저장 전에 한 번 확인해주세요.';
+    if (warnings.length) statusEl.classList.add('warning');
+  } catch (err) {
+    statusEl.textContent = `분석 실패: ${err.message}`;
+  } finally {
+    input.disabled = false;
+    input.value = '';
+  }
+}
+
+// 수정 폼처럼 이미 선수가 정해진 행(로스터 고정)은 같은 선수를 찾아 그 행에 챔피언/K·D·A·CS·골드를
+// 꽂고, 신규 세트 입력처럼 선수가 아직 안 정해진 행은 남은 인식 결과를 순서대로 채움(실제 라인과
+// 다를 수 있어 필요하면 기존 드래그 기능으로 바로잡아야 함).
+function applyExtractionToForm(form, extractedPlayers) {
+  ['blue', 'red'].forEach((side) => {
+    const block = form.querySelector(`.team-block.${side}`);
+    if (!block) return;
+    const rows = [...block.querySelectorAll('.lane-row')];
+    const remaining = extractedPlayers.filter((p) => p.team === side);
+
+    rows.forEach((row) => {
+      const select = row.querySelector('.player-select');
+      if (!select.value) return;
+      const idx = remaining.findIndex((p) => p.playerId != null && String(p.playerId) === select.value);
+      if (idx !== -1) {
+        applyExtractionToRow(row, remaining[idx]);
+        remaining.splice(idx, 1);
+      }
+    });
+    rows.forEach((row) => {
+      const select = row.querySelector('.player-select');
+      if (select.value || !remaining.length) return;
+      const entry = remaining.shift();
+      if (entry.playerId != null) select.value = entry.playerId;
+      applyExtractionToRow(row, entry);
+    });
+  });
+  updatePlayerSelectOptions(form);
+}
+function applyExtractionToRow(row, entry) {
+  if (entry.championId) setChampionSlot(row.querySelector('.champion-slot'), entry.championId);
+  const existing = row.querySelector('.kda-gold-inputs');
+  if (existing) existing.remove();
+  row.insertAdjacentHTML('beforeend', renderKdaGoldInputs(entry));
+}
 
 // 상단(새 세트 입력)과 목록(기존 세트 수정) 폼이 동시에 열려있을 수 있어서 scope를 명시적으로 받음 —
 // 안 주면 문서 전체를 봐서 서로 다른 폼끼리 "이미 선택된 선수"가 잘못 간섭할 수 있음.
@@ -963,12 +1092,24 @@ function updatePlayerSelectOptions(scope) {
   });
 }
 
+// 수기 입력 행엔 .kda-gold-inputs 자체가 없을 수 있음(스크린샷을 안 썼다면) — 그 경우 전부 null로 보냄.
+function kdaGoldValue(row, cls) {
+  const el = row.querySelector(cls);
+  if (!el) return null;
+  const v = el.value.trim();
+  return v === '' ? null : Number(v);
+}
 function collectTeam(form, side) {
   const block = form.querySelector(`.team-block.${side}`);
   return [...block.querySelectorAll('.lane-row')].map((row) => ({
     playerId: Number(row.querySelector('.player-select').value),
     lane: row.dataset.lane,
     championId: Number(row.querySelector('.champion-slot').dataset.championId) || null,
+    kills: kdaGoldValue(row, '.kda-k'),
+    deaths: kdaGoldValue(row, '.kda-d'),
+    assists: kdaGoldValue(row, '.kda-a'),
+    cs: kdaGoldValue(row, '.kda-cs'),
+    gold: kdaGoldValue(row, '.kda-gold'),
   }));
 }
 function collectBans(form, side) {
@@ -1083,6 +1224,7 @@ function renderGameTeamColumn(side, team, bans, won) {
               <div class="game-player-name">${p.riotId}${p.displayName ? ` (${p.displayName})` : ''}</div>
               <div class="game-champ-name">${championLabel(p.championId)}</div>
             </div>
+            ${Number.isInteger(p.kills) ? `<div class="game-player-kda">${p.kills}/${p.deaths}/${p.assists}${Number.isInteger(p.cs) ? ` <span class="muted">CS ${p.cs}</span>` : ''}${Number.isInteger(p.gold) ? ` <span class="muted">${p.gold.toLocaleString()}G</span>` : ''}</div>` : ''}
           </div>
         `).join('')}
       </div>
@@ -1135,6 +1277,7 @@ function renderSetEditForm(seriesId, editingSet) {
   return `
     <form class="set-edit-form" data-series-id="${seriesId}" data-set-id="${editingSet.id}">
       <h4 class="set-form-title">Game ${editingSet.setNumber} 수정</h4>
+      ${renderScreenshotUploadRow()}
       <div class="team-columns">
         ${renderTeamInputs('blue', editingSet.blueTeam, laneMapFromParticipants(editingSet.blueTeam), { includeChampionDefaults: true, banDefaults: editingSet.bans.blue, lockedLabel: '(선수 구성 고정)' })}
         ${renderTeamInputs('red', editingSet.redTeam, laneMapFromParticipants(editingSet.redTeam), { includeChampionDefaults: true, banDefaults: editingSet.bans.red, lockedLabel: '(선수 구성 고정)' })}
@@ -1213,6 +1356,7 @@ document.getElementById('seriesList').addEventListener('click', async (e) => {
 
 document.getElementById('seriesList').addEventListener('change', (e) => {
   if (e.target.classList.contains('player-select')) updatePlayerSelectOptions(document.getElementById('seriesList'));
+  if (e.target.classList.contains('scoreboard-upload-input')) handleScoreboardUpload(e.target);
 });
 
 document.getElementById('seriesList').addEventListener('submit', (e) => {

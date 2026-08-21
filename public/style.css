@@ -133,7 +133,7 @@ select option { background: var(--input-bg); color: var(--text); }
 .team-block h4 { margin: 0 0 10px; color: var(--text); }
 .small { font-size: 11px; font-weight: normal; color: var(--muted); }
 
-.lane-row { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; padding: 4px; border-radius: 6px; cursor: grab; }
+.lane-row { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; padding: 4px; border-radius: 6px; cursor: grab; flex-wrap: wrap; }
 .lane-row.dragging { opacity: 0.4; }
 .lane-row.drag-over { background: var(--input-bg); outline: 2px dashed var(--color-blue); }
 .drag-handle { color: var(--muted); cursor: grab; user-select: none; }
@@ -144,6 +144,23 @@ select option { background: var(--input-bg); color: var(--text); }
 .champion-slot { display: flex; align-items: center; gap: 6px; padding: 3px 8px 3px 3px; min-width: 120px; }
 .champion-slot-img { width: 24px; height: 24px; border-radius: 50%; object-fit: cover; }
 .champion-slot-empty { color: var(--muted); font-size: 12px; }
+
+/* 수기 입력엔 이 칸 자체가 없음 — 스크린샷으로 채워지거나(applyExtractionToRow), 이미 스크린샷으로
+   채워진 세트를 수정할 때만 lane-row 끝에 붙음. 줄 폭이 넉넉하면 한 줄에, 좁으면 flex-wrap으로
+   다음 줄에 오른쪽 정렬로 내려감. */
+.kda-gold-inputs { display: flex; gap: 3px; flex-basis: 100%; justify-content: flex-end; margin-top: 2px; }
+.kda-input { width: 40px; padding: 3px 2px; text-align: center; font-size: 12px; }
+.kda-input.kda-gold { width: 52px; }
+/* CS·골드는 세 자리 이상 숫자라 네이티브 스피너 화살표가 자리를 차지하면 글자가 잘려 보임 — 숨김 */
+.kda-input::-webkit-inner-spin-button, .kda-input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.kda-input { -moz-appearance: textfield; }
+
+.scoreboard-upload-row { margin: 8px 0 16px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.scoreboard-upload-label { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border: 1px dashed var(--border-strong); border-radius: 6px; cursor: pointer; font-size: 13px; }
+.scoreboard-upload-label:hover { background: var(--input-bg); }
+.scoreboard-upload-label input[type="file"] { display: none; }
+.scoreboard-upload-status { font-size: 12px; color: var(--muted); }
+.scoreboard-upload-status.warning { color: var(--accent-gold); }
 
 .ban-section { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .ban-label { font-size: 12px; color: var(--muted); }
@@ -398,9 +415,10 @@ tbody tr:hover { background: var(--input-bg); }
 .game-team-col.blue .game-player-row { background: rgba(77, 130, 243, 0.1); }
 .game-player-row + .game-player-row { margin-top: 2px; }
 .game-champ-avatar { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; }
-.game-player-info { line-height: 1.3; min-width: 0; }
+.game-player-info { line-height: 1.3; min-width: 0; flex: 1; }
 .game-player-name { font-size: 12.5px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .game-champ-name { font-size: 11px; color: var(--muted); }
+.game-player-kda { font-size: 11px; color: var(--text); flex-shrink: 0; white-space: nowrap; }
 
 /* 패배팀은 아이콘/이름을 흐리게 해서 승리팀을 상대적으로 강조 */
 .game-team-col.lose .game-champ-avatar,

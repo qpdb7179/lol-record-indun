@@ -102,4 +102,15 @@ for (const [name, type] of Object.entries(newPlayerColumns)) {
   }
 }
 
+// 스크린샷 인식으로만 채워지는 필드 — 수기 입력 세트는 계속 전부 NULL로 남음(수기 폼엔 이 값을
+// 넣을 칸 자체가 없음, public/app.js의 renderTeamInputs 참고). kills/deaths/assists/cs는 예전에
+// 한 번 추가했다 뺐던 적 있어서 이미 있을 수 있음, gold는 이번에 새로 추가.
+const setParticipantColumns = db.prepare("PRAGMA table_info(set_participants)").all().map((c) => c.name);
+const newSetParticipantColumns = { kills: 'INTEGER', deaths: 'INTEGER', assists: 'INTEGER', cs: 'INTEGER', gold: 'INTEGER' };
+for (const [name, type] of Object.entries(newSetParticipantColumns)) {
+  if (!setParticipantColumns.includes(name)) {
+    db.exec(`ALTER TABLE set_participants ADD COLUMN ${name} ${type}`);
+  }
+}
+
 module.exports = db;
