@@ -145,4 +145,33 @@ router.get('/players/:id/sets', (req, res) => {
   })));
 });
 
+// 챔피언 통계 표에서 특정 챔피언을 펼쳤을 때 — 그 챔피언을 픽한 선수별 전적.
+// ?lane= 이 있으면 그 라인 픽만 집계(라인별 챔피언 통계 탭에서 펼쳤을 때, 위에 보이는 "픽" 수와
+// 아래 선수별 합계가 어긋나지 않게— 한 선수가 같은 챔피언을 다른 라인에서도 썼을 수 있어서 라인
+// 필터 없이 전체로 집계하면 라인별 픽 수보다 선수별 합계가 더 커지는 불일치가 생김).
+router.get('/champions/:id/players', (req, res) => {
+  const lane = LANES.includes(req.query.lane) ? req.query.lane : null;
+  const rows = db.prepare(`
+    SELECT sp.player_id AS playerId, p.riot_game_name, p.riot_tag_line,
+      COUNT(*) AS games,
+      SUM(CASE WHEN sp.team = 'blue' AND s.blue_roster = s.winner_roster THEN 1
+               WHEN sp.team = 'red' AND s.red_roster = s.winner_roster THEN 1 ELSE 0 END) AS wins
+    FROM set_participants sp
+    JOIN sets s ON s.id = sp.set_id
+    JOIN players p ON p.id = sp.player_id
+    WHERE sp.champion_id = ? ${lane ? 'AND sp.lane = ?' : ''}
+    GROUP BY sp.player_id
+  `).all(...(lane ? [req.params.id, lane] : [req.params.id]));
+
+  const result = rows.map((r) => ({
+    playerId: r.playerId,
+    riotId: `${r.riot_game_name}#${r.riot_tag_line}`,
+    games: r.games,
+    wins: r.wins,
+    winRate: r.games ? Number(((r.wins / r.games) * 100).toFixed(1)) : 0,
+  }));
+  result.sort((a, b) => b.games - a.games || b.winRate - a.winRate);
+  res.json(result);
+});
+
 module.exports = router;

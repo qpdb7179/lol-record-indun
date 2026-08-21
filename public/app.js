@@ -19,6 +19,8 @@ const state = {
   statsLane: 'all',
   statsChampionExpanded: false,
   statsPlayersById: new Map(),
+  statsExpandedChampionId: null,
+  statsChampionPlayersCache: new Map(),
 };
 
 async function api(path, opts) {
@@ -1216,6 +1218,7 @@ async function loadStats() {
   state.statsChampionsByLane = championsByLane;
   state.statsLane = 'all';
   state.statsChampionExpanded = false;
+  state.statsExpandedChampionId = null;
   state.statsPlayersById = new Map(players.map((p) => [String(p.playerId), p]));
   renderChampionStatsSection();
 
@@ -1242,6 +1245,40 @@ document.getElementById('playerStats').addEventListener('click', (e) => {
 // 들쭉날쭉해 보임) 항상 예측 가능하게 함.
 const CHAMPION_STATS_PAGE_SIZE = 10;
 
+// 챔피언 행을 누르면 그 챔피언을 픽한 선수별 전적을 바로 아래 펼쳐서 보여줌(선수 통계표와 별개로,
+// "이 챔피언을 누가 얼마나 잘 썼는지"를 챔피언 축에서 바로 보고 싶다는 요청). 캐시 키에 라인도 넣음
+// — 라인 탭에서 펼쳤을 땐 그 라인 픽만 집계해야 위에 보이는 "픽" 수와 아래 선수별 합계가 맞음
+// (라인 필터 없이 전체로 집계하면 같은 챔피언을 다른 라인에서도 쓴 선수 때문에 합계가 더 커짐).
+function championBreakdownCacheKey(lane, championId) {
+  return `${lane}:${championId}`;
+}
+function renderChampionPlayersBreakdown(lane, championId) {
+  const data = state.statsChampionPlayersCache.get(championBreakdownCacheKey(lane, championId));
+  if (!data) return '<p class="muted champion-breakdown-loading">불러오는 중...</p>';
+  if (!data.length) return '<p class="muted champion-breakdown-loading">기록이 없습니다.</p>';
+  return `
+    <div class="champion-breakdown">
+      ${data.map((p) => `
+        <div class="champion-breakdown-row">
+          <span class="champion-breakdown-name">${p.riotId}</span>
+          <span class="champion-breakdown-record">${p.games}전 ${p.wins}승 ${p.games - p.wins}패</span>
+          <span class="champion-breakdown-winrate">${p.winRate}%</span>
+        </div>`).join('')}
+    </div>`;
+}
+
+function renderChampionRow(c, colspan) {
+  const isExpanded = state.statsExpandedChampionId === c.championId;
+  const banCells = colspan === 6 ? `<td>${c.bans}</td><td>${c.banRate}%</td>` : '';
+  let html = `<tr class="stats-champion-row ${isExpanded ? 'expanded' : ''}" data-champion-id="${c.championId}">
+    <td>${champCell(c.championId)}</td><td>${c.picks}</td><td>${c.pickRate}%</td><td>${c.winRate}%</td>${banCells}
+  </tr>`;
+  if (isExpanded) {
+    html += `<tr class="stats-champion-expand-row"><td colspan="${colspan}">${renderChampionPlayersBreakdown(state.statsLane, c.championId)}</td></tr>`;
+  }
+  return html;
+}
+
 // "전체"는 밴 통계를 포함한 전체 표, 특정 라인은 밴이 라인에 귀속되지 않는 개념이라 밴 컬럼을 뺀
 // 별도 표를 씀 — 라인 탭을 눌러도 새로 fetch하지 않고 loadStats에서 미리 받아둔 데이터를 재사용.
 function renderChampionStatsSection() {
@@ -1249,6 +1286,7 @@ function renderChampionStatsSection() {
   const allRows = lane === 'all' ? state.statsChampionsAll : state.statsChampionsByLane[lane];
   const expanded = state.statsChampionExpanded;
   const rows = expanded ? allRows : allRows.slice(0, CHAMPION_STATS_PAGE_SIZE);
+  const colspan = lane === 'all' ? 6 : 4;
   const filterHtml = `
     <div class="stats-lane-filter">
       <button type="button" class="stats-lane-btn ${lane === 'all' ? 'active' : ''}" data-lane="all">전체</button>
@@ -1256,20 +1294,21 @@ function renderChampionStatsSection() {
     </div>`;
   const tableHtml = lane === 'all'
     ? `<table><thead><tr><th>챔피언</th><th>픽</th><th>픽률</th><th>승률</th><th>밴</th><th>밴률</th></tr></thead>
-       <tbody>${rows.map((c) => `<tr><td>${champCell(c.championId)}</td><td>${c.picks}</td><td>${c.pickRate}%</td><td>${c.winRate}%</td><td>${c.bans}</td><td>${c.banRate}%</td></tr>`).join('')}</tbody></table>`
+       <tbody>${rows.map((c) => renderChampionRow(c, colspan)).join('')}</tbody></table>`
     : `<table><thead><tr><th>챔피언</th><th>픽</th><th>픽률</th><th>승률</th></tr></thead>
-       <tbody>${rows.map((c) => `<tr><td>${champCell(c.championId)}</td><td>${c.picks}</td><td>${c.pickRate}%</td><td>${c.winRate}%</td></tr>`).join('') || '<tr><td colspan="4" class="muted">이 라인에 기록된 세트가 없습니다.</td></tr>'}</tbody></table>`;
+       <tbody>${rows.map((c) => renderChampionRow(c, colspan)).join('') || '<tr><td colspan="4" class="muted">이 라인에 기록된 세트가 없습니다.</td></tr>'}</tbody></table>`;
   const moreBtnHtml = allRows.length > CHAMPION_STATS_PAGE_SIZE
     ? `<button type="button" class="stats-more-btn" id="championStatsMoreBtn">${expanded ? '접기' : `더보기 (${allRows.length - CHAMPION_STATS_PAGE_SIZE}개 더)`}</button>`
     : '';
   document.getElementById('championStats').innerHTML = filterHtml + tableHtml + moreBtnHtml;
 }
 
-document.getElementById('championStats').addEventListener('click', (e) => {
+document.getElementById('championStats').addEventListener('click', async (e) => {
   const laneBtn = e.target.closest('.stats-lane-btn');
   if (laneBtn) {
     state.statsLane = laneBtn.dataset.lane;
     state.statsChampionExpanded = false;
+    state.statsExpandedChampionId = null;
     renderChampionStatsSection();
     return;
   }
@@ -1277,5 +1316,23 @@ document.getElementById('championStats').addEventListener('click', (e) => {
   if (moreBtn) {
     state.statsChampionExpanded = !state.statsChampionExpanded;
     renderChampionStatsSection();
+    return;
+  }
+  const champRow = e.target.closest('.stats-champion-row');
+  if (champRow) {
+    const championId = Number(champRow.dataset.championId);
+    const lane = state.statsLane;
+    const cacheKey = championBreakdownCacheKey(lane, championId);
+    state.statsExpandedChampionId = state.statsExpandedChampionId === championId ? null : championId;
+    renderChampionStatsSection();
+    if (state.statsExpandedChampionId === championId && !state.statsChampionPlayersCache.has(cacheKey)) {
+      try {
+        const query = lane === 'all' ? '' : `?lane=${lane}`;
+        state.statsChampionPlayersCache.set(cacheKey, await api(`/api/stats/champions/${championId}/players${query}`));
+      } catch {
+        state.statsChampionPlayersCache.set(cacheKey, []);
+      }
+      if (state.statsExpandedChampionId === championId) renderChampionStatsSection();
+    }
   }
 });

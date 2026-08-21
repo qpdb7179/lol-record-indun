@@ -211,6 +211,18 @@ tbody tr:hover { background: var(--input-bg); }
 .stats-more-btn { display: block; margin: -16px auto 24px; font-size: 12px; color: var(--muted); background: var(--input-bg); border: 1px solid var(--border-strong); border-radius: 999px; padding: 5px 16px; }
 .stats-more-btn:hover { color: var(--text); background: var(--border); }
 
+.stats-champion-row { cursor: pointer; }
+.stats-champion-row.expanded { background: var(--input-bg); }
+.stats-champion-row td:first-child { color: var(--accent-gold-bright); font-weight: 600; }
+.stats-champion-expand-row td { padding: 0; background: var(--card-bg-2); }
+.champion-breakdown { padding: 4px 16px; }
+.champion-breakdown-loading { padding: 10px 16px; margin: 0; }
+.champion-breakdown-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; font-size: 12px; }
+.champion-breakdown-row + .champion-breakdown-row { border-top: 1px solid var(--border); }
+.champion-breakdown-name { color: var(--text); font-weight: 600; }
+.champion-breakdown-record { color: var(--muted); margin-left: auto; }
+.champion-breakdown-winrate { font-weight: 700; width: 42px; text-align: right; flex-shrink: 0; }
+
 .top-champs { display: flex; gap: 5px; }
 .top-champs img { width: 24px; height: 24px; border-radius: 50%; object-fit: cover; }
 
