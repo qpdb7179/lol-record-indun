@@ -40,17 +40,23 @@ function toIntOrNull(v) {
   return Number.isInteger(v) && v >= 0 ? v : null;
 }
 
+const VALID_LANES = new Set(['top', 'jungle', 'mid', 'adc', 'support']);
+function toLaneOrNull(v) {
+  return VALID_LANES.has(v) ? v : null;
+}
+
 router.post('/extract-scoreboard', async (req, res) => {
   const { imageBase64, mediaType } = req.body;
   if (!imageBase64) return res.status(400).json({ error: '이미지가 필요합니다' });
 
   try {
-    const raw = await extractScoreboard(imageBase64, mediaType);
+    const { players: raw, blueBans, redBans } = await extractScoreboard(imageBase64, mediaType);
     const champions = await getChampionList();
     const players = db.prepare('SELECT id, riot_game_name, display_name FROM players').all();
 
     const unmatchedPlayers = [];
     const unmatchedChampions = [];
+    const unmatchedBans = [];
     const result = raw.map((r) => {
       const playerId = matchPlayer(r.playerName, players);
       const championId = matchChampion(r.championName, champions);
@@ -60,6 +66,7 @@ router.post('/extract-scoreboard', async (req, res) => {
         team: r.team === 'red' ? 'red' : 'blue',
         playerId,
         championId,
+        lane: toLaneOrNull(r.lane),
         rawPlayerName: r.playerName,
         rawChampionName: r.championName,
         kills: toIntOrNull(r.kills),
@@ -70,7 +77,15 @@ router.post('/extract-scoreboard', async (req, res) => {
       };
     });
 
-    res.json({ players: result, unmatchedPlayers, unmatchedChampions });
+    const matchBans = (names) => names.map((name) => {
+      const championId = matchChampion(name, champions);
+      if (!championId) unmatchedBans.push(name);
+      return championId;
+    }).filter(Boolean);
+
+    const bans = { blue: matchBans(blueBans), red: matchBans(redBans) };
+
+    res.json({ players: result, bans, unmatchedPlayers, unmatchedChampions, unmatchedBans });
   } catch (err) {
     res.status(502).json({ error: err.message });
   }

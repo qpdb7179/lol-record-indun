@@ -1027,9 +1027,11 @@ async function handleScoreboardUpload(input) {
       body: JSON.stringify({ imageBase64, mediaType: file.type || 'image/png' }),
     });
     applyExtractionToForm(form, result.players);
+    applyExtractionToBans(form, result.bans);
     const warnings = [];
     if (result.unmatchedPlayers.length) warnings.push(`선수 매칭 실패(${result.unmatchedPlayers.join(', ')})`);
     if (result.unmatchedChampions.length) warnings.push(`챔피언 매칭 실패(${result.unmatchedChampions.join(', ')})`);
+    if (result.unmatchedBans.length) warnings.push(`밴 챔피언 매칭 실패(${result.unmatchedBans.join(', ')})`);
     statusEl.textContent = warnings.length
       ? `자동으로 채웠어요. 다만 ${warnings.join(', ')}는 직접 확인해주세요. K/D/A·CS·골드도 저장 전에 한 번 확인해주세요.`
       : '자동으로 채웠어요. 저장 전에 한 번 확인해주세요.';
@@ -1043,8 +1045,9 @@ async function handleScoreboardUpload(input) {
 }
 
 // 수정 폼처럼 이미 선수가 정해진 행(로스터 고정)은 같은 선수를 찾아 그 행에 챔피언/K·D·A·CS·골드를
-// 꽂고, 신규 세트 입력처럼 선수가 아직 안 정해진 행은 남은 인식 결과를 순서대로 채움(실제 라인과
-// 다를 수 있어 필요하면 기존 드래그 기능으로 바로잡아야 함).
+// 꽂음. 신규 세트 입력처럼 선수가 아직 안 정해진 행은, 인식 결과의 lane(아이템창 8번째 칸 아이콘으로
+// 판별한 라인 — 픽 챔피언보다 오히려 더 안정적으로 인식됨)이 있으면 그 라인 행에 바로 꽂고, lane을
+// 못 정한 인식 결과만 남은 행에 순서대로 채움(그 경우엔 기존 드래그 기능으로 바로잡아야 할 수 있음).
 function applyExtractionToForm(form, extractedPlayers) {
   ['blue', 'red'].forEach((side) => {
     const block = form.querySelector(`.team-block.${side}`);
@@ -1063,6 +1066,16 @@ function applyExtractionToForm(form, extractedPlayers) {
     });
     rows.forEach((row) => {
       const select = row.querySelector('.player-select');
+      if (select.value) return;
+      const idx = remaining.findIndex((p) => p.lane === row.dataset.lane);
+      if (idx === -1) return;
+      const entry = remaining[idx];
+      if (entry.playerId != null) select.value = entry.playerId;
+      applyExtractionToRow(row, entry);
+      remaining.splice(idx, 1);
+    });
+    rows.forEach((row) => {
+      const select = row.querySelector('.player-select');
       if (select.value || !remaining.length) return;
       const entry = remaining.shift();
       if (entry.playerId != null) select.value = entry.playerId;
@@ -1070,6 +1083,17 @@ function applyExtractionToForm(form, extractedPlayers) {
     });
   });
   updatePlayerSelectOptions(form);
+}
+
+function applyExtractionToBans(form, bans) {
+  ['blue', 'red'].forEach((side) => {
+    const block = form.querySelector(`.team-block.${side}`);
+    if (!block) return;
+    const ids = (bans && bans[side]) || [];
+    [...block.querySelectorAll('.ban-slot')].forEach((slot, i) => {
+      if (ids[i]) setChampionSlot(slot, ids[i]);
+    });
+  });
 }
 function applyExtractionToRow(row, entry) {
   if (entry.championId) setChampionSlot(row.querySelector('.champion-slot'), entry.championId);
