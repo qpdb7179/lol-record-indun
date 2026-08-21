@@ -14,6 +14,9 @@ const state = {
   playerSearchQuery: '',
   editingPlayerId: null,
   detailPlayerId: null,
+  statsChampionsAll: [],
+  statsChampionsByLane: {},
+  statsLane: 'all',
 };
 
 async function api(path, opts) {
@@ -1118,16 +1121,53 @@ document.getElementById('seriesList').addEventListener('submit', (e) => {
 });
 
 // ---- 통계 ----
+function champCell(championId) {
+  return `<img class="recent-champ-icon" src="${championImg(championId)}" alt="${championLabel(championId)}">${championLabel(championId)}`;
+}
+
 async function loadStats() {
-  const [champions, players] = await Promise.all([api('/api/stats/champions'), api('/api/stats/players')]);
-  document.getElementById('championStats').innerHTML = `
-    <table><thead><tr><th>챔피언</th><th>픽</th><th>픽률</th><th>승률</th><th>밴</th><th>밴률</th></tr></thead>
-    <tbody>${champions.map((c) => `
-      <tr><td><img class="recent-champ-icon" src="${championImg(c.championId)}" alt="${championLabel(c.championId)}">${championLabel(c.championId)}</td><td>${c.picks}</td><td>${c.pickRate}%</td><td>${c.winRate}%</td><td>${c.bans}</td><td>${c.banRate}%</td></tr>
-    `).join('')}</tbody></table>`;
+  const [championsAll, championsByLane, players] = await Promise.all([
+    api('/api/stats/champions'), api('/api/stats/champions/by-lane'), api('/api/stats/players'),
+  ]);
+  state.statsChampionsAll = championsAll;
+  state.statsChampionsByLane = championsByLane;
+  state.statsLane = 'all';
+  renderChampionStatsSection();
+
   document.getElementById('playerStats').innerHTML = `
-    <table><thead><tr><th>선수</th><th>경기수</th><th>승수</th><th>승률</th><th>선호 라인</th></tr></thead>
+    <table><thead><tr><th>선수</th><th>경기수</th><th>승수</th><th>승률</th><th>선호 라인</th><th>주력 챔피언</th></tr></thead>
     <tbody>${players.map((p) => `
-      <tr><td>${p.riotId}</td><td>${p.games}</td><td>${p.wins}</td><td>${p.winRate}%</td><td>${p.favoriteLane ? LANE_LABEL[p.favoriteLane] : '-'}</td></tr>
+      <tr>
+        <td>${p.riotId}</td><td>${p.games}</td><td>${p.wins}</td><td>${p.winRate}%</td><td>${p.favoriteLane ? LANE_LABEL[p.favoriteLane] : '-'}</td>
+        <td><div class="top-champs">${p.topChampions.length ? p.topChampions.map((c) => `
+          <span class="top-champ-chip" title="${championLabel(c.championId)} ${c.games}전 ${c.wins}승 (${c.winRate}%)">
+            <img src="${championImg(c.championId)}" alt="${championLabel(c.championId)}">${c.games}전
+          </span>`).join('') : '<span class="muted">-</span>'}</div></td>
+      </tr>
     `).join('')}</tbody></table>`;
 }
+
+// "전체"는 밴 통계를 포함한 전체 표, 특정 라인은 밴이 라인에 귀속되지 않는 개념이라 밴 컬럼을 뺀
+// 별도 표를 씀 — 라인 탭을 눌러도 새로 fetch하지 않고 loadStats에서 미리 받아둔 데이터를 재사용.
+function renderChampionStatsSection() {
+  const lane = state.statsLane;
+  const rows = lane === 'all' ? state.statsChampionsAll : state.statsChampionsByLane[lane];
+  const filterHtml = `
+    <div class="stats-lane-filter">
+      <button type="button" class="stats-lane-btn ${lane === 'all' ? 'active' : ''}" data-lane="all">전체</button>
+      ${LANES.map((l) => `<button type="button" class="stats-lane-btn ${lane === l ? 'active' : ''}" data-lane="${l}">${LANE_LABEL[l]}</button>`).join('')}
+    </div>`;
+  const tableHtml = lane === 'all'
+    ? `<table><thead><tr><th>챔피언</th><th>픽</th><th>픽률</th><th>승률</th><th>밴</th><th>밴률</th></tr></thead>
+       <tbody>${rows.map((c) => `<tr><td>${champCell(c.championId)}</td><td>${c.picks}</td><td>${c.pickRate}%</td><td>${c.winRate}%</td><td>${c.bans}</td><td>${c.banRate}%</td></tr>`).join('')}</tbody></table>`
+    : `<table><thead><tr><th>챔피언</th><th>픽</th><th>픽률</th><th>승률</th></tr></thead>
+       <tbody>${rows.map((c) => `<tr><td>${champCell(c.championId)}</td><td>${c.picks}</td><td>${c.pickRate}%</td><td>${c.winRate}%</td></tr>`).join('') || '<tr><td colspan="4" class="muted">이 라인에 기록된 세트가 없습니다.</td></tr>'}</tbody></table>`;
+  document.getElementById('championStats').innerHTML = filterHtml + tableHtml;
+}
+
+document.getElementById('championStats').addEventListener('click', (e) => {
+  const btn = e.target.closest('.stats-lane-btn');
+  if (!btn) return;
+  state.statsLane = btn.dataset.lane;
+  renderChampionStatsSection();
+});
