@@ -1123,7 +1123,7 @@ async function loadStats() {
   document.getElementById('championStats').innerHTML = `
     <table><thead><tr><th>챔피언</th><th>픽</th><th>픽률</th><th>승률</th><th>밴</th><th>밴률</th></tr></thead>
     <tbody>${champions.map((c) => `
-      <tr><td>${championLabel(c.championId)}</td><td>${c.picks}</td><td>${c.pickRate}%</td><td>${c.winRate}%</td><td>${c.bans}</td><td>${c.banRate}%</td></tr>
+      <tr><td><img class="recent-champ-icon" src="${championImg(c.championId)}" alt="${championLabel(c.championId)}">${championLabel(c.championId)}</td><td>${c.picks}</td><td>${c.pickRate}%</td><td>${c.winRate}%</td><td>${c.bans}</td><td>${c.banRate}%</td></tr>
     `).join('')}</tbody></table>`;
   document.getElementById('playerStats').innerHTML = `
     <table><thead><tr><th>선수</th><th>경기수</th><th>승수</th><th>승률</th><th>선호 라인</th></tr></thead>
