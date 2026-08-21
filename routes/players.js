@@ -93,6 +93,56 @@ router.post('/:id/refresh', async (req, res) => {
   }
 });
 
+// 참가자 정보 수정. 표시 이름만 바뀌면 Riot API 호출 없이 그대로 저장하고,
+// 게임이름/태그(실제 Riot ID)가 바뀌면 등록(POST /)과 동일하게 Riot API로 재조회해서
+// puuid/티어/숙련도를 통째로 새로 확정함 — 문자열만 바꾸면 puuid는 옛 계정 걸 그대로 쓰게 돼서
+// "이름은 새 계정인데 전적/티어는 옛 계정" 같은 불일치가 생기기 때문(자세한 배경은 CLAUDE.md 참고).
+// 이 경우 puuid가 다른 계정으로 바뀔 수 있으므로 최근경기/솔로·자유랭크 캐시도 같이 비워서 다시 불러오게 함.
+router.put('/:id', async (req, res) => {
+  const player = db.prepare('SELECT * FROM players WHERE id = ?').get(req.params.id);
+  if (!player) return res.status(404).json({ error: '참가자를 찾을 수 없습니다' });
+
+  const { gameName, tagLine, displayName } = req.body;
+  if (!gameName || !tagLine) return res.status(400).json({ error: 'gameName, tagLine이 필요합니다' });
+  const newGameName = gameName.trim();
+  const newTagLine = tagLine.trim();
+  const newDisplayName = displayName ? displayName.trim() : null;
+
+  const riotIdChanged = newGameName !== player.riot_game_name || newTagLine !== player.riot_tag_line;
+
+  if (!riotIdChanged) {
+    db.prepare('UPDATE players SET display_name = ? WHERE id = ?').run(newDisplayName, player.id);
+    return res.json(serialize(db.prepare('SELECT * FROM players WHERE id = ?').get(player.id)));
+  }
+
+  try {
+    const profile = await fetchPlayerProfile(newGameName, newTagLine);
+    const now = new Date().toISOString();
+    db.prepare(`
+      UPDATE players SET
+        riot_game_name=?, riot_tag_line=?, display_name=?, puuid=?,
+        current_tier=?, current_rank=?, current_lp=?, current_wins=?, current_losses=?,
+        flex_tier=?, flex_rank=?, flex_lp=?, flex_wins=?, flex_losses=?,
+        top_champions_json=?, last_synced_at=?,
+        recent_stats_json=NULL, recent_stats_fetched_at=NULL,
+        solo_queue_stats_json=NULL, solo_queue_stats_fetched_at=NULL,
+        flex_queue_stats_json=NULL, flex_queue_stats_fetched_at=NULL
+      WHERE id = ?
+    `).run(
+      profile.gameName, profile.tagLine, newDisplayName, profile.puuid,
+      profile.tier, profile.rank, profile.leaguePoints, profile.wins, profile.losses,
+      profile.flexTier, profile.flexRank, profile.flexLeaguePoints, profile.flexWins, profile.flexLosses,
+      JSON.stringify(profile.topChampions), now, player.id
+    );
+    res.json(serialize(db.prepare('SELECT * FROM players WHERE id = ?').get(player.id)));
+  } catch (err) {
+    if (/UNIQUE constraint/.test(err.message)) {
+      return res.status(409).json({ error: '이미 등록된 게임이름#태그입니다' });
+    }
+    res.status(502).json({ error: err.message });
+  }
+});
+
 // 최근 N경기(match-v5) 챔피언별 전적 — 호출량이 커서 온디맨드(버튼 클릭)로만 조회, 결과는 캐싱.
 // ?queue=solo|flex 를 주면 그 큐로만 필터링해서 별도 캐시에 저장(참가자 상세 모달의 랭크 카드에서 사용).
 router.post('/:id/recent-stats', async (req, res) => {
