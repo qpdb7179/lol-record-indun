@@ -220,7 +220,9 @@ tbody tr:hover { background: var(--input-bg); }
 .champion-breakdown-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; font-size: 12px; }
 .champion-breakdown-row + .champion-breakdown-row { border-top: 1px solid var(--border); }
 .champion-breakdown-name { color: var(--text); font-weight: 600; flex-shrink: 0; min-width: 90px; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.champion-breakdown-row .wl-bar { flex: 1; }
+/* 표 안(.recent-stats-table)의 막대는 열 폭에 자연히 갇히지만, 여긴 이름+막대뿐인 flex 줄이라
+   flex:1을 주면 줄 전체를 다 차지해버림 — 폭을 절반 정도로 캡 걸고 오른쪽으로 붙임. */
+.champion-breakdown-row .wl-bar { width: 50%; max-width: 260px; margin-left: auto; flex: 0 1 auto; }
 
 /* 승/패 막대 — "N전 N승 N패" 텍스트 대신 이긴/진 판수 비율만큼 폭이 나뉘는 막대(참고 스크린샷 스타일).
    0판인 쪽은 세그먼트를 아예 안 그려서 막대 모서리가 어색하게 안 남게 함. */
