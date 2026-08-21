@@ -219,9 +219,21 @@ tbody tr:hover { background: var(--input-bg); }
 .champion-breakdown-loading { padding: 10px 16px; margin: 0; }
 .champion-breakdown-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; font-size: 12px; }
 .champion-breakdown-row + .champion-breakdown-row { border-top: 1px solid var(--border); }
-.champion-breakdown-name { color: var(--text); font-weight: 600; }
-.champion-breakdown-record { color: var(--muted); margin-left: auto; }
-.champion-breakdown-winrate { font-weight: 700; width: 42px; text-align: right; flex-shrink: 0; }
+.champion-breakdown-name { color: var(--text); font-weight: 600; flex-shrink: 0; min-width: 90px; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.champion-breakdown-row .wl-bar { flex: 1; }
+
+/* 승/패 막대 — "N전 N승 N패" 텍스트 대신 이긴/진 판수 비율만큼 폭이 나뉘는 막대(참고 스크린샷 스타일).
+   0판인 쪽은 세그먼트를 아예 안 그려서 막대 모서리가 어색하게 안 남게 함. */
+.wl-bar { display: flex; align-items: center; gap: 6px; }
+.wl-bar-track { flex: 1; display: flex; height: 20px; border-radius: 4px; overflow: hidden; background: var(--input-bg); min-width: 50px; }
+.wl-bar-win, .wl-bar-loss { display: flex; align-items: center; overflow: hidden; }
+.wl-bar-win span, .wl-bar-loss span { font-size: 10px; font-weight: 700; color: #fff; white-space: nowrap; padding: 0 5px; }
+.wl-bar-win { background: var(--color-blue); justify-content: flex-start; }
+.wl-bar-loss { background: var(--color-red); justify-content: flex-end; }
+.wl-bar-empty { flex: 1; }
+.wl-bar-rate { font-size: 11px; font-weight: 700; flex-shrink: 0; width: 34px; text-align: right; }
+.wl-bar-rate.good { color: var(--color-blue-text); }
+.wl-bar-rate.bad { color: var(--color-red-text); }
 
 .top-champs { display: flex; gap: 5px; }
 .top-champs img { width: 24px; height: 24px; border-radius: 50%; object-fit: cover; }

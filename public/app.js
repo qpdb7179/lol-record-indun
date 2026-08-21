@@ -222,16 +222,31 @@ function formatRelativeTime(iso) {
   return `${Math.round(diffHour / 24)}일 전`;
 }
 
+// 승/패를 막대 폭으로도 보여주는 공용 컴포넌트("1전 1승 0패" 텍스트만 있으면 너무 딱딱해 보인다는
+// 피드백 — 사용자가 준 참고 스크린샷의 승/패 막대 스타일을 그대로 재현). 이긴 쪽/진 쪽 각각의 판수에
+// 비례해 flex-grow를 줘서 폭이 나뉨(0판인 쪽은 세그먼트 자체를 안 그려서 빈 모서리가 안 남게).
+function renderWinLossBar(wins, losses) {
+  const total = wins + losses;
+  const winRate = total ? Math.round((wins / total) * 100) : 0;
+  const segments = [];
+  if (wins > 0) segments.push(`<div class="wl-bar-win" style="flex-grow:${wins}"><span>${wins}승</span></div>`);
+  if (losses > 0) segments.push(`<div class="wl-bar-loss" style="flex-grow:${losses}"><span>${losses}패</span></div>`);
+  return `
+    <div class="wl-bar">
+      <div class="wl-bar-track">${segments.join('') || '<div class="wl-bar-empty"></div>'}</div>
+      <span class="wl-bar-rate ${winRate >= 50 ? 'good' : 'bad'}">${winRate}%</span>
+    </div>`;
+}
+
 function renderChampionAggregateTable(perChampion) {
   return `
     <table class="recent-stats-table">
-      <thead><tr><th>챔피언</th><th>전적</th><th>승률</th><th>KDA</th></tr></thead>
+      <thead><tr><th>챔피언</th><th>전적/승률</th><th>KDA</th></tr></thead>
       <tbody>
         ${perChampion.map((c) => `
           <tr>
             <td><img class="recent-champ-icon" src="${championImg(c.championId)}" alt="${championLabel(c.championId)}">${championLabel(c.championId)}</td>
-            <td>${c.games}전 ${c.wins}승 ${c.losses}패</td>
-            <td>${c.winRate}%</td>
+            <td>${renderWinLossBar(c.wins, c.losses)}</td>
             <td>${c.kda === null ? 'Perfect' : `${c.kda}:1`}<br><span class="muted">${c.avgKills}/${c.avgDeaths}/${c.avgAssists}</span></td>
           </tr>`).join('')}
       </tbody>
@@ -1261,8 +1276,7 @@ function renderChampionPlayersBreakdown(lane, championId) {
       ${data.map((p) => `
         <div class="champion-breakdown-row">
           <span class="champion-breakdown-name">${p.riotId}</span>
-          <span class="champion-breakdown-record">${p.games}전 ${p.wins}승 ${p.games - p.wins}패</span>
-          <span class="champion-breakdown-winrate">${p.winRate}%</span>
+          ${renderWinLossBar(p.wins, p.games - p.wins)}
         </div>`).join('')}
     </div>`;
 }
