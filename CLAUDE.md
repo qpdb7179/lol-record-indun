@@ -26,13 +26,12 @@ npm start
 
 ## Architecture
 
-- `server.js` — Express 앱 엔트리포인트. `public/` 정적 서빙, `/api/champions`(Data Dragon 프록시), `/api/players`, `/api/series`, `/api/stats`, `/api/vision` 라우트 마운트. JSON 바디 제한 10mb(점수판 스크린샷을 base64로 받아서 기본 100kb로는 부족).
+- `server.js` — Express 앱 엔트리포인트. `public/` 정적 서빙, `/api/champions`(Data Dragon 프록시), `/api/players`, `/api/series`, `/api/stats` 라우트 마운트.
 - `db.js` — SQLite 연결 및 스키마(`players`, `series`, `series_rosters`, `sets`, `set_participants`, `set_bans`). `DB_PATH` 환경변수로 파일 위치 지정(기본 `./data/lol-record-indun.db`), 없는 디렉토리는 자동 생성.
 - `lib/riot.js` — Riot 공식 API 클라이언트. Account-v1(`asia` 라우팅)으로 riotId→PUUID, League-v4/Champion-Mastery-v4(`kr` 라우팅, 둘 다 **by-puuid**)로 티어·숙련도 상위 3개 조회. `RIOT_API_KEY` 환경변수 필요(없으면 참가자 등록/새로고침 API가 에러 반환). 솔로랭크(`RANKED_SOLO_5x5`)와 자유랭크(`RANKED_FLEX_SR`)를 각각 별도로 가져옴(둘 다 `entries` 배열에서 `queueType`으로 찾음) — 솔로랭크는 없으면 다른 큐로 대체하지 않고 그냥 언랭 처리(예전엔 `entries[0]` 폴백이 있어서 자유랭크가 솔로랭크인 것처럼 보일 수 있었음, 제거함). 각 큐마다 `tier/rank/leaguePoints/wins/losses` 반환(참가자 상세 모달의 승패·승률 표시에 사용).
   - **2026-08-20 버그 수정**: 원래 `summoner-v4`로 암호화된 summonerId를 받아 `league-v4`(`by-summoner`)를 호출했는데, Riot API가 `summoner-v4` 응답에서 `id` 필드를 더 이상 내려주지 않게 바뀌어서 `by-summoner/undefined` 호출이 되며 403이 발생했음. `league-v4`가 이제 `by-puuid`도 지원해서 summoner-v4 호출 자체를 없애고 puuid로 직접 조회하도록 변경(`players.summoner_id` 컬럼도 함께 제거).
 - `lib/dataDragon.js` — Riot Data Dragon(`ddragon.leagueoflegends.com`)에서 최신 패치의 챔피언 목록(한글명+이미지 URL)을 가져와 6시간 캐싱. API 키 불필요.
 - `lib/fearless.js` — `getUsedChampionIds(seriesId, beforeSetNumber)`: 같은 시리즈의 이전 세트들에서 밴/픽으로 쓰인 챔피언 id 집합을 반환. 피어리스 드래프트(이번 시즌 LCK 방식 — 한 시리즈 내에서 이미 쓴 챔피언은 이후 세트에서 밴/픽 불가) 검증에 사용.
-- `lib/vision.js` — 사설 게임(커스텀)은 Riot API로 가져올 방법이 없어서(아래 2026-08-21 로그 참고) 대안으로 만든 모듈. 경기 종료 후 점수판 스크린샷을 Anthropic Messages API(`claude-sonnet-5`, vision)에 보내 10명(팀/닉네임/챔피언명/K·D·A/CS)을 JSON으로 추출. `ANTHROPIC_API_KEY` 환경변수 필요. **챔피언 인식은 반복 테스트에서 매번 다른 결과가 나올 정도로 부정확**(초상화가 작아서 사실상 추측) — 선수 닉네임/K·D·A/CS는 반대로 안정적으로 정확했음. `routes/vision.js`가 이 결과를 실제 등록 참가자/챔피언 목록과 매칭.
 - `routes/players.js` — 참가자 등록(Riot API 조회 후 upsert)/목록/새로고침/삭제. `displayName`(실명/닉네임, 선택)은 Riot 데이터와 무관하게 사용자가 직접 입력해 저장. op.gg 링크는 `https://op.gg/lol/summoners/kr/{gameName}-{tagLine}` 형태로 생성만 하고 스크래핑은 하지 않음(ToS 이슈 회피).
   - `POST /:id/recent-stats` — match-v5 기반 최근 `RECENT_GAMES_COUNT`(7)경기 챔피언별 전적. **온디맨드 전용**(참가자 목록/등록 시 자동 호출 안 함) — 프로필 1개당 API 호출이 1(목록)+N(상세)건이라 비쌈(아래 상태 로그의 레이트리밋 실측 참고). `players.recent_stats_json`/`recent_stats_fetched_at`에 결과를 캐싱하고 **1시간**(`RECENT_STATS_CACHE_MS`) 이내 재요청은 캐시 반환, `?force=1`이면 캐시 무시하고 강제 재조회.
 - `routes/series.js` — 시리즈(Bo3/Bo5) 생성 및 세트 기록의 핵심 로직:
@@ -72,7 +71,6 @@ npm start
 - **네트워크**: k3s의 Traefik/ServiceLB는 기존 nginx(indun.cloud가 80/443 사용 중)와 충돌 방지를 위해 비활성화된 상태 → 이 앱은 **NodePort 30081**로 노출, nginx(`/etc/nginx/conf.d/lol-record-indun.conf`)가 `lol-record.indun.site` → `127.0.0.1:30081`로 리버스 프록시.
 - **DB 영속화**: SQLite 파일은 k3s PVC(local-path-provisioner, 이 노드에 로컬 저장)에 저장. 단일 노드 클러스터라 파드가 재시작돼도 유지되지만, EC2 인스턴스 자체가 삭제되면 함께 사라짐(별도 백업 없음 — 향후 개선 여지로 남겨둠).
 - **Riot API 키**: `RIOT_API_KEY`는 git에 커밋하지 않고 k8s Secret으로 관리(서버에서 `kubectl create secret` 직접 실행). 초기엔 Personal(개발자) 키로 시작(24시간 만료, 수동 갱신 필요) — Production Key는 신청 후 승인되면 같은 방식으로 Secret 값만 교체.
-- **Anthropic API 키**(2026-08-21 추가): `ANTHROPIC_API_KEY`도 같은 `lol-record-indun-secrets` k8s Secret에 저장(git에 커밋 안 함). 스크린샷 인식(`lib/vision.js`)용, 사용자가 자기 계정 키를 직접 발급해서 전달함.
 - **DNS**: 이 서버엔 AWS 자격증명이 없어 Claude가 Route53 레코드를 직접 못 만듦 — `lol-record.indun.site` A레코드는 사용자가 직접 추가해야 함.
 
 ## 진행 상황 로그 (Status Log)
@@ -170,7 +168,7 @@ npm start
     1. **전체 이미지를 2560px로 업스케일해서 전송** — input 토큰이 1,230→4,925로 늘었지만(비용 3~4배), 챔피언 일치율은 거의 그대로(10명 중 1~2명만 우연히 일치, 나머지는 매번 다름).
     2. **챔피언 초상화 10개를 개별로 크롭해서 6배 확대한 뒤, 확대 이미지 10장 + 원본 스크린샷까지 총 11장을 한 번에 전송, 인덱스별로 판별 요청** — 가장 정교하게 시도해본 방법. 2번 반복 비교했을 때 10명 중 4명(이렐리아/레넥톤/이즈리얼/아칼리)은 두 번 다 일치해서 살짝 개선되긴 했으나, 여전히 6명은 매번 다름 — 신뢰하기엔 부족. 비용도 이미지 11장이라 더 비싸지고(장당 $0.03~0.06), 가끔 `max_tokens`를 다 써버릴 정도로 추론이 길어져 응답 실패도 발생(8192까지 올려서 겨우 안정화).
   - **결론**: 해상도/크롭 방식을 바꿔도 챔피언 인식은 근본적으로 못 믿을 수준 — 작고 단순화된 원형 초상화 자체가 이 비전 모델에게 어려운 케이스로 보임(프롬프트/해상도 튜닝으로 해결되는 문제가 아님). 반면 선수 이름/K·D·A/CS/진영은 이 모든 실험에서 일관되게 정확했음.
-  - 사용자에게 "① 이름·KDA·CS만 자동, 챔피언은 완전 수동" vs "② 챔피언도 베스트 추측으로 채우되 매번 확인 필요(신뢰도 30~40%)" 두 선택지를 그대로 보고 → 처음엔 ②(`b27b311`)로 재배포해서 사용자가 직접 테스트해보기로 했으나, 재배포 직후 **"스크린샷 기능 자체를 계획 취소"** 하기로 최종 결정 → `app.yaml` 이미지 태그를 다시 `9184aa5`(스크린샷/KDA 기능 이전 버전)로 롤백해 배포. **`lib/vision.js`/`routes/vision.js`와 `set_participants`의 `kills/deaths/assists/cs` 컬럼, 프론트의 KDA 입력칸/업로드 UI 코드는 git에는 그대로 남아있지만 현재 배포본엔 포함 안 됨** — 나중에 이 기능을 다시 꺼내 쓰고 싶으면 `b27b311` 커밋 내용을 참고. `ANTHROPIC_API_KEY`는 k8s Secret에 남겨둠(당장 쓰이진 않지만 제거를 요청받지 않았음).
+  - 사용자에게 "① 이름·KDA·CS만 자동, 챔피언은 완전 수동" vs "② 챔피언도 베스트 추측으로 채우되 매번 확인 필요(신뢰도 30~40%)" 두 선택지를 그대로 보고 → 처음엔 ②(`b27b311`)로 재배포해서 사용자가 직접 테스트해보기로 했으나, 재배포 직후 **"스크린샷 기능 자체를 계획 취소"** 하기로 최종 결정. 처음엔 `app.yaml` 이미지 태그만 `9184aa5`로 되돌렸었는데(코드는 git에 그대로), 곧이어 UI 디자인 작업을 새로 시작하게 되면서 **`git revert b27b311`로 코드 자체도 완전히 되돌림**(`lib/vision.js`/`routes/vision.js` 삭제, `set_participants`의 `kills/deaths/assists/cs` 컬럼과 프론트 KDA 입력칸/업로드 UI 전부 제거) — 안 그러면 이후 커밋에서 새로 빌드할 때마다 취소된 기능이 코드에 남아있다 다시 배포될 위험이 있었음. 나중에 이 기능을 다시 꺼내 쓰고 싶으면 `b27b311` 커밋 내용을 참고. `ANTHROPIC_API_KEY`는 k8s Secret에 남겨둠(당장 쓰이진 않지만 제거를 요청받지 않았음).
 - **2026-08-21**: 사용자가 "참가자 상세 모달의 '최근 10경기'는 안에서 새로고침되는데 티어는 밖(카드의 새로고침 버튼)에서만 가능하다"고 지적 + "밖에서 새로고침 누르면 최근 10경기도 같이 새로고침되는 거냐"고 질문.
   - 확인 결과: 카드의 "새로고침"과 모달 안에 새로 추가한 버튼 둘 다 동일한 `POST /api/players/:id/refresh`(`routes/players.js`)를 호출하는데, 이 라우트는 `fetchPlayerProfile()`(계정/티어/랭크/LP/승패/숙련도)만 갱신하고 `recent_stats_json`/`solo_queue_stats_json`/`flex_queue_stats_json`(각각 전체 최근 10경기, 솔로·자유 큐별 20경기 집계) 컬럼은 손대지 않음 — 완전히 별개의 캐시라서 **티어 새로고침은 최근 경기 기록에 전혀 영향을 주지 않음**(반대도 마찬가지, 위 2026-08-20 큐별 캐시 분리 로그와 같은 이유).
   - `public/app.js`의 `renderPlayerDetailBody()` 최상단에 `.recent-stats-header`(기존 "최근 10경기" 새로고침 버튼과 동일 스타일)로 "티어/숙련도 n분 전 기준" + "새로고침" 버튼 행을 추가. 클릭 시 `/refresh` 호출 → 응답으로 받은 최신 player 객체로 `state.players` 교체 + 모달 body/타이틀만 재렌더(모달을 닫지 않고 그 자리에서 갱신) + 바깥 참가자 목록(`renderPlayers()`)도 같이 갱신해서 모달 닫을 때 카드도 최신 상태로 맞춰둠.

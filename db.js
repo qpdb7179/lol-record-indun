@@ -102,13 +102,4 @@ for (const [name, type] of Object.entries(newPlayerColumns)) {
   }
 }
 
-// 스크린샷 인식으로 K/D/A·CS를 채울 수 있게 되면서 추가(2026-08-21) — 수동 입력 세트는 계속 NULL로 남음.
-const setParticipantColumns = db.prepare("PRAGMA table_info(set_participants)").all().map((c) => c.name);
-const newSetParticipantColumns = { kills: 'INTEGER', deaths: 'INTEGER', assists: 'INTEGER', cs: 'INTEGER' };
-for (const [name, type] of Object.entries(newSetParticipantColumns)) {
-  if (!setParticipantColumns.includes(name)) {
-    db.exec(`ALTER TABLE set_participants ADD COLUMN ${name} ${type}`);
-  }
-}
-
 module.exports = db;

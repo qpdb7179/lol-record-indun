@@ -144,10 +144,10 @@ router.post('/:id/sets', (req, res) => {
     const setId = setInfo.lastInsertRowid;
 
     const insertParticipant = db.prepare(
-      'INSERT INTO set_participants (set_id, player_id, team, lane, champion_id, kills, deaths, assists, cs) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      'INSERT INTO set_participants (set_id, player_id, team, lane, champion_id) VALUES (?, ?, ?, ?, ?)'
     );
-    blueTeam.forEach((p) => insertParticipant.run(setId, p.playerId, 'blue', p.lane, p.championId, kdaField(p.kills), kdaField(p.deaths), kdaField(p.assists), kdaField(p.cs)));
-    redTeam.forEach((p) => insertParticipant.run(setId, p.playerId, 'red', p.lane, p.championId, kdaField(p.kills), kdaField(p.deaths), kdaField(p.assists), kdaField(p.cs)));
+    blueTeam.forEach((p) => insertParticipant.run(setId, p.playerId, 'blue', p.lane, p.championId));
+    redTeam.forEach((p) => insertParticipant.run(setId, p.playerId, 'red', p.lane, p.championId));
 
     const insertBan = db.prepare('INSERT INTO set_bans (set_id, team, champion_id, ban_order) VALUES (?, ?, ?, ?)');
     (bans.blue || []).forEach((cid, i) => insertBan.run(setId, 'blue', cid, i + 1));
@@ -222,10 +222,10 @@ router.put('/:id/sets/:setId', (req, res) => {
     db.prepare('UPDATE sets SET winner_roster = ? WHERE id = ?').run(winnerRoster, targetSet.id);
 
     const insertParticipant = db.prepare(
-      'INSERT INTO set_participants (set_id, player_id, team, lane, champion_id, kills, deaths, assists, cs) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      'INSERT INTO set_participants (set_id, player_id, team, lane, champion_id) VALUES (?, ?, ?, ?, ?)'
     );
-    blueTeam.forEach((p) => insertParticipant.run(targetSet.id, p.playerId, 'blue', p.lane, p.championId, kdaField(p.kills), kdaField(p.deaths), kdaField(p.assists), kdaField(p.cs)));
-    redTeam.forEach((p) => insertParticipant.run(targetSet.id, p.playerId, 'red', p.lane, p.championId, kdaField(p.kills), kdaField(p.deaths), kdaField(p.assists), kdaField(p.cs)));
+    blueTeam.forEach((p) => insertParticipant.run(targetSet.id, p.playerId, 'blue', p.lane, p.championId));
+    redTeam.forEach((p) => insertParticipant.run(targetSet.id, p.playerId, 'red', p.lane, p.championId));
 
     const insertBan = db.prepare('INSERT INTO set_bans (set_id, team, champion_id, ban_order) VALUES (?, ?, ?, ?)');
     (bans.blue || []).forEach((cid, i) => insertBan.run(targetSet.id, 'blue', cid, i + 1));
@@ -252,11 +252,6 @@ function recomputeSeriesStatus(seriesId, format) {
 
 function sameMembers(arr, set) {
   return arr.length === set.size && arr.every((x) => set.has(x));
-}
-
-// K/D/A·CS는 스크린샷 인식으로 채워지거나 수동 입력 없이 비워질 수 있는 선택 필드 — 숫자가 아니면 NULL로 저장.
-function kdaField(v) {
-  return Number.isInteger(v) && v >= 0 ? v : null;
 }
 
 function validateSetPayload(blueTeam, redTeam, bans, winner) {
@@ -350,10 +345,6 @@ function serializeParticipant(p) {
     displayName: p.display_name,
     lane: p.lane,
     championId: p.champion_id,
-    kills: p.kills,
-    deaths: p.deaths,
-    assists: p.assists,
-    cs: p.cs,
   };
 }
 
