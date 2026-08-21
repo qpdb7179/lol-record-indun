@@ -13,6 +13,7 @@ const state = {
   flexQueueOpen: false,
   playerSearchQuery: '',
   editingPlayerId: null,
+  detailPlayerId: null,
 };
 
 async function api(path, opts) {
@@ -109,9 +110,11 @@ function renderPlayers() {
     el.innerHTML = `<p class="muted">"${query}"에 맞는 참가자가 없습니다.</p>`;
     return;
   }
-  el.innerHTML = filtered.map((p) => p.id === state.editingPlayerId ? renderPlayerEditCard(p) : renderPlayerCard(p)).join('');
+  el.innerHTML = filtered.map(renderPlayerCard).join('');
 }
 
+// 카드 얼굴엔 자주 쓰는 액션만(op.gg/새로고침) 둠 — 수정/삭제는 상세 모달 헤더로 옮겨서
+// 카드 버튼이 4개→3개→줄바꿈으로 늘어나 지저분해지는 걸 피함(2026-08-21).
 function renderPlayerCard(p) {
   return `
     <div class="player-card" data-id="${p.id}">
@@ -127,34 +130,31 @@ function renderPlayerCard(p) {
       </div>
       <div class="player-actions">
         <a class="opgg-btn" href="${p.opggUrl}" target="_blank" rel="noopener">op.gg</a>
-        <button data-action="edit" data-id="${p.id}">수정</button>
         <button data-action="refresh" data-id="${p.id}">새로고침</button>
-        <button data-action="delete" data-id="${p.id}">삭제</button>
       </div>
     </div>`;
 }
 
-// 표시 이름만 바꿀 땐 Riot API 호출이 필요 없지만, 게임이름/태그를 바꾸면 백엔드가
-// 등록 때처럼 Riot API로 재조회해서 puuid/티어부터 다시 확정함(PUT /api/players/:id 주석 참고).
-function renderPlayerEditCard(p) {
+// 상세 모달 안에서 쓰는 수정 폼(모달 헤더의 "수정" 버튼을 누르면 렌더). 표시 이름만 바꿀 땐
+// Riot API 호출이 필요 없지만, 게임이름/태그를 바꾸면 백엔드가 등록 때처럼 Riot API로
+// 재조회해서 puuid/티어부터 다시 확정함(PUT /api/players/:id 주석 참고).
+function renderPlayerEditForm(p) {
   return `
-    <div class="player-card player-card-editing" data-id="${p.id}">
-      <form class="player-edit-form" data-id="${p.id}">
-        <div class="player-edit-fields">
-          <div class="player-edit-name-row">
-            <input type="text" name="gameName" value="${escapeAttr(p.gameName)}" placeholder="게임 이름" required>
-            <span class="player-edit-hash">#</span>
-            <input type="text" name="tagLine" value="${escapeAttr(p.tagLine)}" placeholder="태그" required>
-          </div>
-          <input type="text" name="displayName" value="${escapeAttr(p.displayName || '')}" placeholder="표시 이름 (선택, 실명/닉네임)">
+    <form class="player-edit-form" data-id="${p.id}">
+      <div class="player-edit-fields">
+        <div class="player-edit-name-row">
+          <input type="text" name="gameName" value="${escapeAttr(p.gameName)}" placeholder="게임 이름" required>
+          <span class="player-edit-hash">#</span>
+          <input type="text" name="tagLine" value="${escapeAttr(p.tagLine)}" placeholder="태그" required>
         </div>
-        <p class="error player-edit-error"></p>
-        <div class="player-edit-actions">
-          <button type="submit">저장</button>
-          <button type="button" data-action="cancel-edit" data-id="${p.id}">취소</button>
-        </div>
-      </form>
-    </div>`;
+        <input type="text" name="displayName" value="${escapeAttr(p.displayName || '')}" placeholder="표시 이름 (선택, 실명/닉네임)">
+      </div>
+      <p class="error player-edit-error"></p>
+      <div class="player-edit-actions">
+        <button type="submit">저장</button>
+        <button type="button" class="cancel-player-edit-btn">취소</button>
+      </div>
+    </form>`;
 }
 
 document.getElementById('playerSearchInput').addEventListener('input', (e) => {
@@ -298,6 +298,7 @@ function renderRecentStatsBody(stats, fetchedAt, myRiotId) {
 }
 
 function renderPlayerDetailBody(p) {
+  if (state.editingPlayerId === p.id) return renderPlayerEditForm(p);
   return `
     <div class="ranked-card-header recent-stats-header">
       <span>${p.lastSyncedAt ? `티어/숙련도 ${formatRelativeTime(p.lastSyncedAt)} 기준` : '티어 정보 없음'}</span>
@@ -333,15 +334,64 @@ function openPlayerDetail(player) {
   state.expandedMatchId = null;
   state.soloQueueOpen = false;
   state.flexQueueOpen = false;
+  state.editingPlayerId = null;
+  state.detailPlayerId = player.id;
   document.getElementById('playerDetailTitle').textContent = playerDisplay(player);
   document.getElementById('playerDetailBody').innerHTML = renderPlayerDetailBody(player);
   document.getElementById('playerDetailModal').classList.remove('hidden');
 }
 function closePlayerDetail() {
+  state.editingPlayerId = null;
   document.getElementById('playerDetailModal').classList.add('hidden');
 }
 document.getElementById('closePlayerDetail').addEventListener('click', closePlayerDetail);
+document.getElementById('editPlayerHeaderBtn').addEventListener('click', () => {
+  const player = state.players.find((p) => p.id === state.detailPlayerId);
+  if (!player) return;
+  state.editingPlayerId = player.id;
+  document.getElementById('playerDetailBody').innerHTML = renderPlayerDetailBody(player);
+});
+document.getElementById('deletePlayerHeaderBtn').addEventListener('click', async () => {
+  if (!state.detailPlayerId) return;
+  if (!confirm('삭제할까요?')) return;
+  await api(`/api/players/${state.detailPlayerId}`, { method: 'DELETE' });
+  closePlayerDetail();
+  await loadPlayers();
+});
+document.getElementById('playerDetailBody').addEventListener('submit', async (e) => {
+  const form = e.target.closest('.player-edit-form');
+  if (!form) return;
+  e.preventDefault();
+  const id = form.dataset.id;
+  const gameName = form.querySelector('[name="gameName"]').value.trim();
+  const tagLine = form.querySelector('[name="tagLine"]').value.trim();
+  const displayName = form.querySelector('[name="displayName"]').value.trim();
+  const errEl = form.querySelector('.player-edit-error');
+  const submitBtn = form.querySelector('button[type="submit"]');
+  errEl.textContent = '';
+  submitBtn.disabled = true;
+  try {
+    const updated = await api(`/api/players/${id}`, { method: 'PUT', body: JSON.stringify({ gameName, tagLine, displayName }) });
+    const idx = state.players.findIndex((p) => String(p.id) === id);
+    if (idx !== -1) state.players[idx] = updated;
+    state.editingPlayerId = null;
+    document.getElementById('playerDetailTitle').textContent = playerDisplay(updated);
+    document.getElementById('playerDetailBody').innerHTML = renderPlayerDetailBody(updated);
+    renderPlayers();
+  } catch (err) {
+    errEl.textContent = err.message;
+    submitBtn.disabled = false;
+  }
+});
 document.getElementById('playerDetailBody').addEventListener('click', async (e) => {
+  const cancelEditBtn = e.target.closest('.cancel-player-edit-btn');
+  if (cancelEditBtn) {
+    state.editingPlayerId = null;
+    const player = state.players.find((p) => p.id === state.detailPlayerId);
+    if (player) document.getElementById('playerDetailBody').innerHTML = renderPlayerDetailBody(player);
+    return;
+  }
+
   const tierBtn = e.target.closest('#refreshTierBtn');
   if (tierBtn) {
     const id = tierBtn.dataset.id;
@@ -458,47 +508,14 @@ document.getElementById('playerList').addEventListener('click', async (e) => {
       } finally {
         actionBtn.disabled = false;
       }
-    } else if (actionBtn.dataset.action === 'delete') {
-      if (!confirm('삭제할까요?')) return;
-      await api(`/api/players/${id}`, { method: 'DELETE' });
-      await loadPlayers();
-    } else if (actionBtn.dataset.action === 'edit') {
-      state.editingPlayerId = Number(id);
-      renderPlayers();
-    } else if (actionBtn.dataset.action === 'cancel-edit') {
-      state.editingPlayerId = null;
-      renderPlayers();
     }
     return;
   }
-  if (e.target.closest('.player-edit-form')) return; // 수정 폼 안 클릭(입력창 등)은 카드 상세 열기로 안 이어지게
   if (e.target.closest('a')) return; // op.gg 링크는 그냥 새 탭으로 이동
   const card = e.target.closest('.player-card');
   if (card) {
     const player = state.players.find((p) => String(p.id) === card.dataset.id);
     if (player) openPlayerDetail(player);
-  }
-});
-
-document.getElementById('playerList').addEventListener('submit', async (e) => {
-  const form = e.target.closest('.player-edit-form');
-  if (!form) return;
-  e.preventDefault();
-  const id = form.dataset.id;
-  const gameName = form.querySelector('[name="gameName"]').value.trim();
-  const tagLine = form.querySelector('[name="tagLine"]').value.trim();
-  const displayName = form.querySelector('[name="displayName"]').value.trim();
-  const errEl = form.querySelector('.player-edit-error');
-  const submitBtn = form.querySelector('button[type="submit"]');
-  errEl.textContent = '';
-  submitBtn.disabled = true;
-  try {
-    await api(`/api/players/${id}`, { method: 'PUT', body: JSON.stringify({ gameName, tagLine, displayName }) });
-    state.editingPlayerId = null;
-    await loadPlayers();
-  } catch (err) {
-    errEl.textContent = err.message;
-    submitBtn.disabled = false;
   }
 });
 

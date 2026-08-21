@@ -75,8 +75,12 @@
 <div id="playerDetailModal" class="modal-overlay hidden">
   <div class="modal player-detail-modal">
     <div class="modal-header">
-      <strong id="playerDetailTitle"></strong>
-      <button type="button" id="closePlayerDetail" aria-label="닫기">×</button>
+      <strong id="playerDetailTitle" class="player-detail-title"></strong>
+      <div class="player-detail-header-actions">
+        <button type="button" id="editPlayerHeaderBtn">수정</button>
+        <button type="button" id="deletePlayerHeaderBtn">삭제</button>
+        <button type="button" id="closePlayerDetail" aria-label="닫기">×</button>
+      </div>
     </div>
     <div class="player-detail-body" id="playerDetailBody"></div>
   </div>
